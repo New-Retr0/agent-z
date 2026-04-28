@@ -1,0 +1,123 @@
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model BotConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  valueJson String   @map("value_json")
+  updatedAt DateTime @updatedAt @map("updated_at")
+}
+
+model RoleMapping {
+  id             String   @id @default(cuid())
+  kind           String
+  discordRoleId  String   @map("discord_role_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([kind])
+  @@map("role_mapping")
+}
+
+model ChannelMapping {
+  id              String   @id @default(cuid())
+  kind            String
+  discordChannelId String @map("discord_channel_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([kind])
+  @@map("channel_mapping")
+}
+
+model RateLimit {
+  id     String  @id @default(cuid())
+  kind   String
+  value  Int
+  bypassUserIds String[] @default([]) @map("bypass_user_ids")
+
+  @@unique([kind])
+  @@map("rate_limit")
+}
+
+model AgentRun {
+  id              String   @id @default(cuid())
+  tier            String
+  invokerUserId   String   @map("invoker_user_id")
+  prompt          String
+  modelId         String   @map("model_id")
+  status          String
+  stepCount       Int      @default(0) @map("step_count")
+  tokensIn        Int      @default(0) @map("tokens_in")
+  tokensOut       Int      @default(0) @map("tokens_out")
+  costUsd         Decimal? @map("cost_usd") @db.Decimal(20, 10)
+  startedAt       DateTime @default(now()) @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+  workflowRunId   String?  @map("workflow_run_id")
+  lastWebhookAt   DateTime? @map("last_webhook_at")
+
+  steps           AgentRunStep[]
+
+  @@index([startedAt])
+  @@index([status])
+  @@map("agent_run")
+}
+
+model AgentRunStep {
+  id        String   @id @default(cuid())
+  runId     String   @map("run_id")
+  stepIndex Int      @map("step_index")
+  toolCalls Json?    @map("tool_calls")
+  text      String?  @db.Text
+  usage     Json?
+  run       AgentRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, stepIndex])
+  @@map("agent_run_step")
+}
+
+model Confirmation {
+  id             String   @id @default(cuid())
+  workflowRunId  String?  @map("workflow_run_id")
+  hookToken      String?  @unique @map("hook_token")
+  summary        String
+  requestedBy    String?  @map("requested_by")
+  status         String
+  createdAt      DateTime @default(now()) @map("created_at")
+  resolvedAt     DateTime? @map("resolved_at")
+
+  @@index([status])
+  @@map("confirmation")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actor      String
+  action     String
+  target     String
+  beforeJson String?  @map("before_json") @db.Text
+  afterJson  String?  @map("after_json") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([action])
+  @@map("audit_log")
+}
+
+model KnowledgeDoc {
+  id        String   @id @default(cuid())
+  path      String   @unique
+  title     String
+  content   String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("knowledge_doc")
+}

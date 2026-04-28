@@ -1,0 +1,28 @@
+{
+  "name": "agent-z",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent Z — Gateway bot: rules-message reaction adds Verified; does not remove it on un-react. Runs beside discord-mcp.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "node scripts/sync-knowledge.mjs && tsc",
+    "start": "node dist/index.js",
+    "dev": "node scripts/sync-knowledge.mjs && tsx src/index.ts",
+    "register": "tsx src/agent/registerCommands.ts",
+    "knowledge:sync": "node scripts/sync-knowledge.mjs",
+    "lockdown": "node scripts/apply-unverified-lockdown.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/gateway": "^2.0.82",
+    "ai": "^6.0.168",
+    "discord.js": "^14.25.1",
+    "dotenv": "^17.4.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}

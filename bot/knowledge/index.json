@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "topics": [
+    {
+      "id": "stub-welcome",
+      "file": "stub-welcome.md",
+      "title": "Knowledge bundle",
+      "summary": "Configure AGENT_Z_KNOWLEDGE_SOURCE and run npm run knowledge:sync"
+    }
+  ],
+  "generatedAt": "2026-04-23T08:28:45.138Z"
+}
