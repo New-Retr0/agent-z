@@ -2,13 +2,20 @@ import { describe, expect, it } from "vitest";
 import { formatDiscordChunks } from "./agent-run-persist";
 
 describe("formatDiscordChunks", () => {
-  it("includes a run header and fallback text for empty output", () => {
+  it("omits the run header by default for normal channel replies", () => {
     const chunks = formatDiscordChunks("12345678-1234-1234-1234-123456789012", "   ");
 
     expect(chunks).toHaveLength(1);
+    expect(chunks[0]).not.toContain("**Agent Z result**");
+    expect(chunks[0]).not.toContain("12345678");
+    expect(chunks[0]).toContain("no final text was returned");
+  });
+
+  it("can include a run header for private staff interaction replies", () => {
+    const chunks = formatDiscordChunks("12345678-1234-1234-1234-123456789012", "Done.", { includeRunId: true });
+
     expect(chunks[0]).toContain("**Agent Z result**");
     expect(chunks[0]).toContain("12345678");
-    expect(chunks[0]).toContain("no final text was returned");
   });
 
   it("keeps Discord messages under the target chunk size", () => {

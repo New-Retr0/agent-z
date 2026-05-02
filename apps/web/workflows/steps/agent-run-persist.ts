@@ -4,6 +4,7 @@ import { getBot } from "@repo/chat-bot";
 import { prisma } from "@repo/db";
 import type { AgentReplyTarget } from "@repo/agent/types";
 import type { SerializedChannel, SerializedThread } from "chat";
+import { formatDiscordChunks as formatChunks, postDiscordChannelMessage } from "@/lib/discord-replies";
 
 /** Minimal `onFinish` / `onStepFinish` payload we persist (avoids `ai` type depth in step bundle). */
 type FinishPayload = {
@@ -81,14 +82,14 @@ export async function stepPostAgentRunReply(
 
   try {
     if (replyTarget._type === "discord:Interaction") {
-      for (const chunk of formatDiscordChunks(agentRunId, text)) {
+      for (const chunk of formatDiscordChunks(agentRunId, text, { includeRunId: true })) {
         await postDiscordInteractionFollowup(replyTarget.applicationId, replyTarget.interactionToken, chunk);
       }
       return;
     }
     if (replyTarget._type === "discord:Channel") {
       for (const chunk of formatDiscordChunks(agentRunId, text)) {
-        await postDiscordChannelMessage(replyTarget.channelId, chunk, replyTarget.messageId);
+        await postDiscordChannelMessage(replyTarget.channelId, chunk, { messageId: replyTarget.messageId });
       }
       return;
     }
@@ -123,52 +124,7 @@ async function postDiscordInteractionFollowup(applicationId: string, interaction
   }
 }
 
-async function postDiscordChannelMessage(channelId: string, content: string, messageId?: string) {
-  const botToken = process.env.DISCORD_BOT_TOKEN?.trim();
-  if (!botToken) {
-    throw new Error("DISCORD_BOT_TOKEN is required to post Discord replies");
-  }
-
-  const body: Record<string, unknown> = {
-    content,
-    allowed_mentions: { parse: [] },
-  };
-  if (messageId) {
-    body.message_reference = {
-      message_id: messageId,
-      channel_id: channelId,
-      fail_if_not_exists: false,
-    };
-  }
-
-  const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bot ${botToken}`,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    const responseBody = await response.text();
-    throw new Error(`Discord channel message failed: ${response.status} ${responseBody.slice(0, 200)}`);
-  }
-}
-
-export function formatDiscordChunks(agentRunId: string, text: string): string[] {
-  const header = `**Agent Z result** (run \`${agentRunId.slice(0, 8)}...\`)\n\n`;
-  const body = text.trim() || "The workflow completed, but no final text was returned.";
-  const firstLimit = 1_900 - header.length;
-  const chunks: string[] = [];
-  let remaining = body;
-
-  chunks.push(`${header}${remaining.slice(0, firstLimit)}`);
-  remaining = remaining.slice(firstLimit);
-
-  while (remaining.length > 0) {
-    chunks.push(remaining.slice(0, 1_900));
-    remaining = remaining.slice(1_900);
-  }
-
-  return chunks;
+export function formatDiscordChunks(agentRunId: string, text: string, options?: { includeRunId?: boolean }): string[] {
+  const header = options?.includeRunId ? `**Agent Z result** (run \`${agentRunId.slice(0, 8)}...\`)\n\n` : "";
+  return formatChunks(text.trim() || "The workflow completed, but no final text was returned.", { header });
 }

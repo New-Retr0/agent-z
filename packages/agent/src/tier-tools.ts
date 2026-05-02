@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { listBundledDocPaths, readBundledDoc } from "@repo/knowledge";
+import { searchKnowledge } from "@repo/knowledge";
 import {
   assertGuildAllowed,
   assertNotDeletingVerifiedRole,
@@ -25,52 +25,22 @@ export type TierToolContext = {
  */
 export function getToolsForTier(tier: AgentTier) {
   const tools = {
-    ping: {
-      description: "Health check — returns the active tier.",
-      inputSchema: z.object({}),
-      execute: async (
-        _input: Record<string, never>,
-        options: { experimental_context?: unknown }
-      ) => {
-        const ctx = options.experimental_context as TierToolContext | undefined;
-        return { ok: true, tier: ctx?.tier ?? tier };
-      },
-    },
-    summarize_intent: {
-      description: "Log a one-phrase summary of the user's goal.",
-      inputSchema: z.object({ phrase: z.string() }),
-      execute: async ({ phrase }: { phrase: string }) => ({ logged: phrase }),
-    },
     search_knowledge: {
       description:
-        "Search the bundled Agent Z community knowledge docs for a short answer. Use this for questions about the server, project, or docs.",
+        "Search public Agent Z community docs for short factual answers about the server, project, or documentation.",
       inputSchema: z.object({ query: z.string().min(1).max(200) }),
       execute: async ({ query }: { query: string }) => {
         "use step";
-        const terms = query
-          .toLowerCase()
-          .split(/\W+/)
-          .filter((term) => term.length >= 3);
-        const files = await listBundledDocPaths();
-        const matches = [];
-        for (const file of files) {
-          const content = await readBundledDoc(file);
-          const haystack = content.toLowerCase();
-          const score = terms.reduce((sum, term) => sum + (haystack.includes(term) ? 1 : 0), 0);
-          if (score > 0 || terms.length === 0) {
-            const title = content.match(/^title:\s*(.+)$/m)?.[1]?.trim() ?? file;
-            const summary = content.match(/^summary:\s*(.+)$/m)?.[1]?.trim();
-            matches.push({
-              file,
-              title,
-              score,
-              excerpt: (summary ?? content.replace(/^---[\s\S]*?---/, "").trim()).slice(0, 700),
-            });
-          }
-        }
+        const results = await searchKnowledge(query, 3);
         return {
           query,
-          matches: matches.sort((a, b) => b.score - a.score).slice(0, 3),
+          matches: results.map((result) => ({
+            id: result.id,
+            title: result.title,
+            score: result.score,
+            excerpt: result.excerpt,
+            source: result.source,
+          })),
         };
       },
     },
@@ -99,8 +69,6 @@ export function getToolsForTier(tier: AgentTier) {
 
   if (tier === "admin") {
     return {
-      ping: tools.ping,
-      summarize_intent: tools.summarize_intent,
       search_knowledge: tools.search_knowledge,
       mod_note: tools.mod_note,
       admin_config_hint: tools.admin_config_hint,
@@ -109,16 +77,12 @@ export function getToolsForTier(tier: AgentTier) {
   }
   if (tier === "mod") {
     return {
-      ping: tools.ping,
-      summarize_intent: tools.summarize_intent,
       search_knowledge: tools.search_knowledge,
       mod_note: tools.mod_note,
       discord_api_request: tools.discord_api_request,
     };
   }
   return {
-    ping: tools.ping,
-    summarize_intent: tools.summarize_intent,
     search_knowledge: tools.search_knowledge,
   };
 }

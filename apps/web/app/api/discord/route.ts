@@ -1,17 +1,22 @@
 import { getBot } from "@repo/chat-bot";
 import { after, NextResponse } from "next/server";
 import { verifyKey } from "discord-interactions";
+import { runDirectAgentZ } from "@/lib/agent-z/direct";
+import { handleWorkflowAction, parseWorkflowActionCustomId } from "@/lib/agent-z/workflow-actions";
 
 export const runtime = "nodejs";
 
 const INTERACTION_TYPE = {
   Ping: 1,
   ApplicationCommand: 2,
+  MessageComponent: 3,
 } as const;
 
 const RESPONSE_TYPE = {
   Pong: 1,
+  ChannelMessageWithSource: 4,
   DeferredChannelMessageWithSource: 5,
+  DeferredUpdateMessage: 6,
 } as const;
 
 const EPHEMERAL_FLAG = 64;
@@ -43,6 +48,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ type: RESPONSE_TYPE.Pong });
     }
 
+    const workflowAction = getWorkflowAction(interaction);
+    if (workflowAction && interaction) {
+      const signatureValid = await verifyDiscordSignature(request, bodyBytes);
+      if (!signatureValid) {
+        return new Response("Invalid signature", { status: 401 });
+      }
+      const invokerUserId = extractInvokerUserId(interaction);
+      if (!invokerUserId) {
+        return NextResponse.json({
+          type: RESPONSE_TYPE.ChannelMessageWithSource,
+          data: { flags: EPHEMERAL_FLAG, content: "Could not read your Discord user id." },
+        });
+      }
+      after(handleAgentZWorkflowAction(interaction, workflowAction, invokerUserId));
+      return NextResponse.json({ type: RESPONSE_TYPE.DeferredUpdateMessage });
+    }
+
     if (isAgentZAdminInteraction(interaction)) {
       const signatureValid = await verifyDiscordSignature(request, bodyBytes);
       if (!signatureValid) {
@@ -52,6 +74,18 @@ export async function POST(request: Request) {
       return NextResponse.json({
         type: RESPONSE_TYPE.DeferredChannelMessageWithSource,
         data: { flags: EPHEMERAL_FLAG },
+      });
+    }
+
+    if (isAgentZSlashInteraction(interaction)) {
+      const signatureValid = await verifyDiscordSignature(request, bodyBytes);
+      if (!signatureValid) {
+        return new Response("Invalid signature", { status: 401 });
+      }
+      after(handleAgentZPublicSlashInteraction(interaction));
+      return NextResponse.json({
+        type: RESPONSE_TYPE.DeferredChannelMessageWithSource,
+        data: { flags: 0 },
       });
     }
 
@@ -103,6 +137,133 @@ function isAgentZAdminInteraction(interaction: Record<string, unknown> | null): 
   return Boolean(data && typeof data === "object" && !Array.isArray(data) && (data as Record<string, unknown>).name === "agent-z-admin");
 }
 
+function isAgentZSlashInteraction(interaction: Record<string, unknown> | null): interaction is Record<string, unknown> {
+  if (!interaction || interaction.type !== INTERACTION_TYPE.ApplicationCommand) {
+    return false;
+  }
+  const data = interaction.data;
+  return Boolean(data && typeof data === "object" && !Array.isArray(data) && (data as Record<string, unknown>).name === "agent-z");
+}
+
+async function handleAgentZPublicSlashInteraction(interaction: Record<string, unknown>) {
+  const applicationId = process.env.DISCORD_APPLICATION_ID?.trim();
+  const token = stringProp(interaction, "token");
+  const channelId = stringProp(interaction, "channel_id");
+
+  if (!applicationId || !token || !channelId) {
+    await editOriginalInteraction(applicationId, token, "**Agent Z** is not configured.", 0);
+    return;
+  }
+
+  const args = extractSlashText(interaction).trim() || "help";
+  if (args === "help") {
+    await editOriginalInteraction(
+      applicationId,
+      token,
+      "Use `/agent-z text:<question>` for normal help. Staff can use `/agent-z-admin action:<request>` for private mod/admin runs.",
+      0
+    );
+    return;
+  }
+
+  const invokerUserId = extractInvokerUserId(interaction);
+  if (!invokerUserId) {
+    await editOriginalInteraction(applicationId, token, "Could not read your Discord user id.", 0);
+    return;
+  }
+
+  try {
+    const result = await runDirectAgentZ({
+      prompt: args,
+      invokerUserId,
+      discordContext: getNativeDiscordContext(interaction),
+      replyTarget: {
+        _type: "discord:Channel",
+        channelId,
+      },
+    });
+
+    if (result.kind === "workflowProposal") {
+      await editOriginalInteraction(
+        applicationId,
+        token,
+        result.text,
+        0,
+        result.components
+      );
+      return;
+    }
+
+    await editOriginalInteraction(applicationId, token, result.text, 0);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await editOriginalInteraction(applicationId, token, `**Agent Z** could not answer: ${message}`, 0);
+  }
+}
+
+function getWorkflowAction(interaction: Record<string, unknown> | null) {
+  if (!interaction || interaction.type !== INTERACTION_TYPE.MessageComponent) {
+    return null;
+  }
+  const data = recordProp(interaction, "data");
+  const customId = stringProp(data, "custom_id");
+  return parseWorkflowActionCustomId(customId);
+}
+
+async function handleAgentZWorkflowAction(
+  interaction: Record<string, unknown>,
+  workflowAction: { action: "start" | "cancel"; token: string },
+  invokerUserId: string
+) {
+  const applicationId = process.env.DISCORD_APPLICATION_ID?.trim();
+  const token = stringProp(interaction, "token");
+  if (!applicationId || !token) {
+    return;
+  }
+
+  try {
+    const result = await handleWorkflowAction({
+      action: workflowAction.action,
+      token: workflowAction.token,
+      userId: invokerUserId,
+    });
+    if (result.ephemeral) {
+      await postInteractionFollowup(applicationId, token, result.text, EPHEMERAL_FLAG);
+      return;
+    }
+    await editOriginalInteraction(
+      applicationId,
+      token,
+      result.text,
+      result.ephemeral ? EPHEMERAL_FLAG : 0,
+      result.components
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await editOriginalInteraction(applicationId, token, `**Agent Z** could not update that workflow: ${message}`, 0, []);
+  }
+}
+
+async function postInteractionFollowup(
+  applicationId: string,
+  interactionToken: string,
+  content: string,
+  flags: number
+) {
+  const response = await fetch(`https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      content: content.slice(0, 1900),
+      flags,
+      allowed_mentions: { parse: [] },
+    }),
+  });
+  if (!response.ok) {
+    console.error("[api/discord] interaction follow-up failed", response.status, await response.text());
+  }
+}
+
 async function handleAgentZAdminInteraction(interaction: Record<string, unknown>, request: Request) {
   const applicationId = process.env.DISCORD_APPLICATION_ID?.trim();
   const internalSecret = process.env.AGENT_Z_INTERNAL_SECRET?.trim();
@@ -111,11 +272,11 @@ async function handleAgentZAdminInteraction(interaction: Record<string, unknown>
   const invokerUserId = extractInvokerUserId(interaction);
 
   if (!applicationId || !internalSecret || !token) {
-    await editOriginalInteraction(applicationId, token, "**Agent Z admin** is not configured.");
+    await editOriginalInteraction(applicationId, token, "**Agent Z admin** is not configured.", EPHEMERAL_FLAG);
     return;
   }
   if (!action || !invokerUserId) {
-    await editOriginalInteraction(applicationId, token, "Use `/agent-z-admin action:<staff request>`.");
+    await editOriginalInteraction(applicationId, token, "Use `/agent-z-admin action:<staff request>`.", EPHEMERAL_FLAG);
     return;
   }
 
@@ -140,21 +301,33 @@ async function handleAgentZAdminInteraction(interaction: Record<string, unknown>
     });
     const payload = await readJson(response);
     if (!response.ok) {
-      await editOriginalInteraction(applicationId, token, `**Agent Z admin** could not start: ${payload.error ?? response.status}`);
+      await editOriginalInteraction(
+        applicationId,
+        token,
+        `**Agent Z admin** could not start: ${payload.error ?? response.status}`,
+        EPHEMERAL_FLAG
+      );
       return;
     }
     await editOriginalInteraction(
       applicationId,
       token,
-      `**Agent Z admin** started with \`${payload.tier ?? "staff"}\` access (workflow \`${payload.runId ?? "unknown"}\`, run \`${String(payload.agentRunId ?? "").slice(0, 8)}...\`). I will post the final answer here privately.`
+      `**Agent Z admin** started with \`${payload.tier ?? "staff"}\` access (workflow \`${payload.runId ?? "unknown"}\`, run \`${String(payload.agentRunId ?? "").slice(0, 8)}...\`). I will post the final answer here privately.`,
+      EPHEMERAL_FLAG
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await editOriginalInteraction(applicationId, token, `**Agent Z admin** could not start: ${message}`);
+    await editOriginalInteraction(applicationId, token, `**Agent Z admin** could not start: ${message}`, EPHEMERAL_FLAG);
   }
 }
 
-async function editOriginalInteraction(applicationId: string | undefined, interactionToken: string | undefined, content: string) {
+async function editOriginalInteraction(
+  applicationId: string | undefined,
+  interactionToken: string | undefined,
+  content: string,
+  flags: number = EPHEMERAL_FLAG,
+  components: Array<Record<string, unknown>> = []
+) {
   if (!applicationId || !interactionToken) {
     return;
   }
@@ -163,8 +336,9 @@ async function editOriginalInteraction(applicationId: string | undefined, intera
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       content: content.slice(0, 1900),
-      flags: EPHEMERAL_FLAG,
+      flags,
       allowed_mentions: { parse: [] },
+      components,
     }),
   });
   if (!response.ok) {

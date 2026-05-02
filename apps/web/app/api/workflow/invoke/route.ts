@@ -70,7 +70,7 @@ export async function POST(request: Request) {
   const replyTarget = parseReplyTarget(body.replyTarget);
   const rc = await getRuntimeConfig();
   const tier = lowerTier(access.tier, maxTier);
-  const system = await buildSystemPrompt(rc);
+  const system = await buildSystemPrompt(rc, tier);
   const agentRunId = randomUUID();
   try {
     await prisma.agentRun.create({
@@ -138,12 +138,26 @@ function lowerTier(actual: AgentTier, max: AgentTier) {
   return TIER_RANK[actual] <= TIER_RANK[max] ? actual : max;
 }
 
-async function buildSystemPrompt(rc: Awaited<ReturnType<typeof getRuntimeConfig>>) {
+async function buildSystemPrompt(rc: Awaited<ReturnType<typeof getRuntimeConfig>>, tier: AgentTier) {
   const base = "You are Agent Z, a helpful assistant for this Discord community.";
+  const tierGuidance =
+    tier === "public" || tier === "verified"
+      ? [
+          "You are running in normal community mode.",
+          "Do not mention internal tool names, MCP tools, health checks, intent logging, workflows, run IDs, admin panels, or moderation/server-management capabilities.",
+          "Do not offer to change server settings, moderate users, inspect private data, or perform admin actions.",
+          "If asked what you can do, describe normal user-facing help: answer questions, explain public community/project docs, summarize public context, and help draft or clarify messages.",
+          "If a user needs staff-only actions, tell them staff can use `/agent-z-admin`.",
+        ].join(" ")
+      : [
+          "You are running in elevated staff mode.",
+          "You may help with staff operations available to this tier, but do not dump raw internal tool names unless the user explicitly asks for implementation details.",
+          "Be careful with moderation or server-management actions and explain what you are doing before making changes.",
+        ].join(" ");
   if (rc.systemPromptOverride?.trim()) {
-    return `${base}\n\n${rc.systemPromptOverride}`;
+    return `${base}\n\n${rc.systemPromptOverride}\n\n${tierGuidance}`;
   }
-  return base;
+  return `${base}\n\n${tierGuidance}`;
 }
 
 async function markRunFailed(agentRunId: string, error: unknown) {

@@ -1,6 +1,6 @@
 import type { Chat } from "chat";
 import { getSlashDiscordContext, getSlashReplyTarget } from "../discord-context";
-import { invokeAgentWorkflow } from "../invoke-workflow";
+import { invokeAgentDirect } from "../invoke-direct";
 
 export function onSlash(bot: Chat) {
   bot.onSlashCommand("agent-z", async (event) => {
@@ -13,19 +13,15 @@ export function onSlash(bot: Chat) {
       return;
     }
     try {
-      await invokeAgentWorkflow({
+      await invokeAgentDirect({
         prompt: args,
         invokerUserId: event.user.userId,
         discordContext: getSlashDiscordContext(event),
         replyTarget: getSlashReplyTarget(event),
-        maxTier: "verified",
-      });
-      await event.channel.post({
-        markdown: "**Agent Z** is thinking. I'll reply here when I finish.",
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      await event.channel.post({ markdown: `**Agent Z** could not start: ${msg}` });
+      await event.channel.post({ markdown: `**Agent Z** could not answer: ${msg}` });
     }
   });
   bot.onSlashCommand("help", async (event) => {

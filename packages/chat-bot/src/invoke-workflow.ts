@@ -1,6 +1,6 @@
 import type { AgentReplyTarget, AgentTier, DiscordInvocationContext } from "@repo/agent/types";
 
-function getBaseUrl(): string {
+export function getBaseUrl(): string {
   const u = process.env.AGENT_Z_APP_BASE_URL?.trim();
   if (u) {
     return u.replace(/\/$/, "");

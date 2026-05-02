@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   }),
   verifyKey: vi.fn(),
   discordWebhook: vi.fn(),
+  runDirectAgentZ: vi.fn(),
+  handleWorkflowAction: vi.fn(),
 }));
 
 vi.mock("next/server", () => ({
@@ -27,6 +29,18 @@ vi.mock("@repo/chat-bot", () => ({
       discord: mocks.discordWebhook,
     },
   }),
+}));
+
+vi.mock("@/lib/agent-z/direct", () => ({
+  runDirectAgentZ: mocks.runDirectAgentZ,
+}));
+
+vi.mock("@/lib/agent-z/workflow-actions", () => ({
+  parseWorkflowActionCustomId: (customId: string | undefined) => {
+    const match = customId?.match(/^agentz:(start|cancel):(.+)$/);
+    return match ? { action: match[1], token: match[2] } : null;
+  },
+  handleWorkflowAction: mocks.handleWorkflowAction,
 }));
 
 import { POST } from "./route";
@@ -54,6 +68,8 @@ describe("Discord route", () => {
     process.env.DISCORD_BOT_TOKEN = "bot-token";
     process.env.DATABASE_URL = "postgres://test";
     process.env.AGENT_Z_INTERNAL_SECRET = "internal-secret";
+    mocks.runDirectAgentZ.mockResolvedValue({ kind: "answer", text: "Hello from Agent Z." });
+    mocks.handleWorkflowAction.mockResolvedValue({ text: "Started reminder workflow.", components: [] });
   });
 
   it("handles agent-z-admin as a native ephemeral interaction", async () => {
@@ -87,12 +103,12 @@ describe("Discord route", () => {
       })
     );
 
-    await Promise.all(mocks.afterTasks);
-
     await expect(response.json()).resolves.toEqual({
       type: 5,
       data: { flags: 64 },
     });
+
+    await Promise.all(mocks.afterTasks);
     expect(fetchMock).toHaveBeenCalledWith(
       new URL("https://agent.test/api/workflow/invoke"),
       expect.objectContaining({
@@ -100,7 +116,7 @@ describe("Discord route", () => {
         headers: expect.objectContaining({ Authorization: "Bearer internal-secret" }),
       })
     );
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toMatchObject({
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
       requiredTier: "mod",
       replyTarget: {
         _type: "discord:Interaction",
@@ -115,11 +131,65 @@ describe("Discord route", () => {
     expect(mocks.discordWebhook).not.toHaveBeenCalled();
   });
 
-  it("delegates non-admin commands to Chat SDK", async () => {
+  it("defers agent-z immediately then answers through the direct path in after()", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({ id: "original" }));
+    vi.stubGlobal("fetch", fetchMock);
+
     const response = await POST(
       signedRequest({
         type: 2,
-        data: { name: "agent-z" },
+        token: "interaction-token",
+        guild_id: "1488609972676984894",
+        channel_id: "1496580126601646150",
+        data: {
+          name: "agent-z",
+          options: [{ name: "text", value: "hello" }],
+        },
+        member: {
+          user: { id: "100000000000000000" },
+          roles: [],
+        },
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      type: 5,
+      data: { flags: 0 },
+    });
+    expect(mocks.discordWebhook).not.toHaveBeenCalled();
+
+    await Promise.all(mocks.afterTasks);
+
+    expect(mocks.runDirectAgentZ).toHaveBeenCalledWith({
+      prompt: "hello",
+      invokerUserId: "100000000000000000",
+      discordContext: {
+        guildId: "1488609972676984894",
+        channelId: "1496580126601646150",
+        roleIds: [],
+        isDirectMessage: false,
+      },
+      replyTarget: {
+        _type: "discord:Channel",
+        channelId: "1496580126601646150",
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://discord.com/api/v10/webhooks/1495910562360594452/interaction-token/messages/@original",
+      expect.objectContaining({ method: "PATCH" })
+    );
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
+      content: "Hello from Agent Z.",
+      flags: 0,
+      components: [],
+    });
+  });
+
+  it("delegates other commands to Chat SDK", async () => {
+    const response = await POST(
+      signedRequest({
+        type: 2,
+        data: { name: "some-other-command" },
       })
     );
 

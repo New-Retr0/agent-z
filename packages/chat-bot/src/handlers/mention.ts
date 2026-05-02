@@ -1,6 +1,6 @@
 import type { Chat, Message, Thread } from "chat";
 import { getMentionDiscordContext, getMentionReplyTarget } from "../discord-context";
-import { invokeAgentWorkflow } from "../invoke-workflow";
+import { invokeAgentDirect } from "../invoke-direct";
 
 export function onMention(bot: Chat) {
   bot.onNewMention(async (thread, message) => {
@@ -25,17 +25,15 @@ export function onMention(bot: Chat) {
 async function invokeFromMessage(thread: Thread, message: Message, prompt: string) {
   const uid = message.author.userId;
   try {
-    await invokeAgentWorkflow({
+    await invokeAgentDirect({
       prompt,
       invokerUserId: uid,
       discordContext: getMentionDiscordContext(thread, message),
       replyTarget: getMentionReplyTarget(thread, message),
-      maxTier: "verified",
     });
-    await thread.post("I'm on it. I'll reply here when I finish.");
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e);
-    await thread.post(`Could not start agent: ${err}`);
+    await thread.post(`Could not answer: ${err}`);
   }
 }
 
