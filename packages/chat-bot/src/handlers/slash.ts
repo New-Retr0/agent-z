@@ -1,5 +1,5 @@
 import type { Chat } from "chat";
-import { getSlashDiscordContext } from "../discord-context";
+import { getSlashDiscordContext, getSlashReplyTarget } from "../discord-context";
 import { invokeAgentWorkflow } from "../invoke-workflow";
 
 export function onSlash(bot: Chat) {
@@ -8,19 +8,20 @@ export function onSlash(bot: Chat) {
     if (args === "help") {
       await event.channel.post({
         markdown:
-          "Use `/agent-z <question>` to run the agent. Slash commands work over Discord Interactions; regular mentions and reactions require Gateway forwarding.",
+          "Use `/agent-z text:<question>` for normal help. Staff can use `/agent-z-admin action:<request>` for private mod/admin runs.",
       });
       return;
     }
     try {
-      const { runId, agentRunId, tier } = await invokeAgentWorkflow({
+      await invokeAgentWorkflow({
         prompt: args,
         invokerUserId: event.user.userId,
         discordContext: getSlashDiscordContext(event),
-        replyTarget: event.channel.toJSON(),
+        replyTarget: getSlashReplyTarget(event),
+        maxTier: "verified",
       });
       await event.channel.post({
-        markdown: `**Agent Z** started with \`${tier}\` access (workflow \`${runId}\`, run \`${agentRunId.slice(0, 8)}...\`). I will post the final answer here when the workflow completes.`,
+        markdown: "**Agent Z** is thinking. I'll reply here when I finish.",
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -29,7 +30,8 @@ export function onSlash(bot: Chat) {
   });
   bot.onSlashCommand("help", async (event) => {
     await event.channel.post({
-      markdown: "Commands: `/agent-z <question>` invokes the agent. Admins configure allowed roles and channels in `/admin/config`.",
+      markdown:
+        "Commands: `/agent-z text:<question>` for normal help, `/agent-z-admin action:<staff request>` for private mod/admin runs. Admins configure roles and channels in `/admin/config`.",
     });
   });
 }

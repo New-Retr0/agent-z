@@ -28,7 +28,20 @@ See **[AGENTS.md](./AGENTS.md)** for runbook detail (tunnels, production, MCP).
 
 - `npm run build` — Turborepo production build
 - `npm run dev` — develop all workspaces
+- `npm run gateway` — optional long-lived Discord Gateway presence process, used only when you want the bot to appear online
 - `npm run mcp` — start `@repo/mcp` dev server (if configured)
+
+## Discord Online Status
+
+The Vercel app uses Discord Interactions/webhooks, so it can respond to slash commands while the Discord member list shows the bot as offline. Discord only shows a bot as online when a long-lived Gateway WebSocket session is connected.
+
+For demos where online presence matters, run the optional Gateway presence process:
+
+```bash
+npm run gateway
+```
+
+This process does not handle Agent Z logic; it only keeps the bot online and sets its activity. The agent behavior remains hosted on Vercel through `apps/web`.
 
 ## License
 

@@ -20,8 +20,8 @@ async function main() {
   const appId = await resolveApplicationId(token, fromEnv);
   const guildId = resolveGuildId();
   await upsertAgentZGuildCommands({ token, applicationId: appId, guildId });
-  console.log("Registered /agent-z and /help in guild", guildId);
-  console.log("In Discord, type /help or /agent-z (with a hyphen) → prompt / help.");
+  console.log("Registered /agent-z, /agent-z-admin, and /help in guild", guildId);
+  console.log("In Discord, type /agent-z text:<question> or /agent-z-admin action:<staff action>.");
 }
 
 main().catch((e) => {

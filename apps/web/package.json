@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "npm run build -w @repo/discord-tools && next build",
     "start": "next start",
     "lint": "eslint"
   },
@@ -23,6 +23,7 @@
     "react": "19.1.4",
     "react-dom": "19.1.4",
     "@workflow/ai": "^4.1.0",
+    "discord-interactions": "^4.4.0",
     "workflow": "^4.2.0",
     "zod": "^3.25.0"
   },

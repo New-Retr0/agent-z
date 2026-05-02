@@ -1,7 +1,7 @@
 import { DurableAgent } from "@workflow/ai/agent";
 import { getWritable } from "workflow";
 import { getToolsForTier } from "@repo/agent/tier-tools";
-import type { AgentReplyTarget, AgentTier } from "@repo/agent/types";
+import type { AgentReplyTarget, AgentTier, DiscordInvocationContext } from "@repo/agent/types";
 import {
   stepMarkAgentRunFailed,
   stepPersistAgentRunFinish,
@@ -15,6 +15,8 @@ export type RunAgentZWorkflowInput = {
   modelId: string;
   system: string;
   tier: AgentTier;
+  discordContext?: DiscordInvocationContext;
+  invokerUserId?: string;
   replyTarget?: AgentReplyTarget;
 };
 
@@ -37,7 +39,11 @@ export async function runAgentZWorkflow(input: RunAgentZWorkflowInput) {
       messages: [{ role: "user", content: input.prompt }],
       writable: getWritable(),
       maxSteps: 20,
-      experimental_context: { tier: input.tier },
+      experimental_context: {
+        tier: input.tier,
+        discordContext: input.discordContext,
+        invokerUserId: input.invokerUserId,
+      },
       onFinish: async (event) => {
         await stepPersistAgentRunFinish(input.agentRunId, {
           totalUsage: event.totalUsage,

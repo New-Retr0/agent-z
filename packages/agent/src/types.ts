@@ -16,6 +16,16 @@ export type AgentReplyTarget =
       isDM: boolean;
       channelVisibility?: string;
       currentMessage?: unknown;
+    }
+  | {
+      _type: "discord:Interaction";
+      applicationId: string;
+      interactionToken: string;
+    }
+  | {
+      _type: "discord:Channel";
+      channelId: string;
+      messageId?: string;
     };
 
 export type DiscordInvocationContext = {

@@ -9,10 +9,20 @@ export async function POST(request: Request) {
   if (denied) {
     return denied;
   }
-  const body = (await request.json()) as { token?: string; approved?: boolean };
+  let body: { token?: string; approved?: boolean };
+  try {
+    body = (await request.json()) as { token?: string; approved?: boolean };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   if (!body.token) {
     return NextResponse.json({ error: "token required" }, { status: 400 });
   }
-  const hook = await resumeHook(body.token, { approved: body.approved === true });
-  return NextResponse.json({ runId: hook.runId });
+  try {
+    const hook = await resumeHook(body.token, { approved: body.approved === true });
+    return NextResponse.json({ runId: hook.runId });
+  } catch (error) {
+    console.error("[api/admin/hooks/resume] resume failed", error);
+    return NextResponse.json({ error: "Could not resume workflow hook" }, { status: 500 });
+  }
 }

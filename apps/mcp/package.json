@@ -14,6 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@repo/discord-tools": "*",
     "dotenv": "^17.4.2",
     "zod": "^4.3.6"
   },

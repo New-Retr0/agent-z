@@ -58,6 +58,22 @@ export function parseReplyTarget(value: unknown): AgentReplyTarget | undefined {
   if (!isRecord(value)) {
     return undefined;
   }
+  if (value._type === "discord:Interaction") {
+    const applicationId = stringProp(value, "applicationId");
+    const interactionToken = stringProp(value, "interactionToken");
+    if (!applicationId || !interactionToken) {
+      return undefined;
+    }
+    return { _type: "discord:Interaction", applicationId, interactionToken };
+  }
+  if (value._type === "discord:Channel") {
+    const channelId = stringProp(value, "channelId");
+    const messageId = optionalStringProp(value, "messageId");
+    if (!channelId) {
+      return undefined;
+    }
+    return { _type: "discord:Channel", channelId, messageId };
+  }
   const adapterName = stringProp(value, "adapterName");
   const id = stringProp(value, "id");
   const isDM = booleanProp(value, "isDM");

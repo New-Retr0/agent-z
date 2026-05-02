@@ -1,5 +1,5 @@
 import type { Message, SlashCommandEvent, Thread } from "chat";
-import type { DiscordInvocationContext } from "@repo/agent/types";
+import type { AgentReplyTarget, DiscordInvocationContext } from "@repo/agent/types";
 
 export function getSlashDiscordContext(event: SlashCommandEvent): DiscordInvocationContext {
   const raw = asRecord(event.raw);
@@ -23,6 +23,21 @@ export function getMentionDiscordContext(thread: Thread, message: Message): Disc
     roleIds: stringArray(member?.roles),
     isDirectMessage: serializedThread.isDM,
   };
+}
+
+export function getSlashReplyTarget(event: SlashCommandEvent): AgentReplyTarget {
+  const raw = asRecord(event.raw);
+  const channel = event.channel.toJSON();
+  const channelId = stringValue(raw?.channel_id) || channelIdFromSerializedId(channel.id);
+  return channelId ? { _type: "discord:Channel", channelId } : channel;
+}
+
+export function getMentionReplyTarget(thread: Thread, message: Message): AgentReplyTarget {
+  const raw = asRecord(message.raw);
+  const serializedThread = thread.toJSON();
+  const channelId = stringValue(raw?.channel_id) || channelIdFromSerializedId(serializedThread.channelId);
+  const messageId = stringValue(raw?.id);
+  return channelId ? { _type: "discord:Channel", channelId, messageId: messageId || undefined } : serializedThread;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

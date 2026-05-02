@@ -10,10 +10,13 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "lint": "turbo lint",
-    "mcp": "npm run dev -w @repo/mcp"
+    "gateway": "npm run dev -w @repo/gateway",
+    "mcp": "npm run dev -w @repo/mcp",
+    "test": "vitest run"
   },
   "devDependencies": {
     "turbo": "^2.5.4",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.5"
   }
 }

@@ -85,6 +85,10 @@ export default async function ConfigPage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">Rate limits</h2>
+        <p className="text-xs text-zinc-500">
+          Supported kinds: <code>user_rpm</code> (per Discord user per minute) and <code>global_rpm</code> (all Agent Z
+          runs per minute). A missing limit means unlimited.
+        </p>
         <ul className="text-sm text-zinc-300 font-mono text-xs">
           {rateLimits.length === 0 ? <li>—</li> : rateLimits.map((r) => (
             <li key={r.id}>

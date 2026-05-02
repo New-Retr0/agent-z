@@ -20,6 +20,8 @@ export async function invokeAgentWorkflow(input: {
   invokerUserId: string;
   discordContext: DiscordInvocationContext;
   replyTarget?: AgentReplyTarget;
+  requiredTier?: AgentTier;
+  maxTier?: AgentTier;
 }): Promise<{ runId: string; agentRunId: string; tier: AgentTier }> {
   const secret = process.env.AGENT_Z_INTERNAL_SECRET?.trim();
   if (!secret) {
@@ -36,6 +38,8 @@ export async function invokeAgentWorkflow(input: {
       invokerUserId: input.invokerUserId,
       discordContext: input.discordContext,
       replyTarget: input.replyTarget,
+      requiredTier: input.requiredTier,
+      maxTier: input.maxTier,
     }),
   });
   if (!res.ok) {

@@ -15,6 +15,7 @@
     "@ai-sdk/gateway": "^2.0.0",
     "@repo/config": "*",
     "@repo/db": "*",
+    "@repo/discord-tools": "*",
     "@repo/knowledge": "*",
     "ai": "^6.0.0",
     "zod": "^3.25.0"

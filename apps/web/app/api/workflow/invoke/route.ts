@@ -3,7 +3,9 @@ import { start } from "workflow/api";
 import { NextResponse } from "next/server";
 import { runAgentZWorkflow } from "@/workflows/agent-z";
 import { resolveDiscordAccess } from "@/lib/discord-access";
+import { resolveWorkflowRateLimit } from "@/lib/rate-limit";
 import {
+  parseAgentTier,
   parseDiscordContext,
   parsePrompt,
   parseReplyTarget,
@@ -14,6 +16,7 @@ import {
 import { getRuntimeConfig } from "@repo/config/runtime-config";
 import { env } from "@repo/config/env";
 import { prisma } from "@repo/db";
+import type { AgentTier } from "@repo/agent/types";
 
 export const runtime = "nodejs";
 
@@ -41,15 +44,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "prompt required and must be 1-8000 characters" }, { status: 400 });
   }
 
-  const access = await resolveDiscordAccess(parseDiscordContext(body.discordContext));
+  const discordContext = parseDiscordContext(body.discordContext);
+  const access = await resolveDiscordAccess(discordContext);
   if (!access.allowed) {
     return NextResponse.json({ error: access.reason }, { status: 403 });
   }
+  const requiredTier = parseAgentTier(body.requiredTier, "public");
+  if (!requiredTier) {
+    return NextResponse.json({ error: "Invalid required tier" }, { status: 400 });
+  }
+  if (!tierMeetsMinimum(access.tier, requiredTier)) {
+    return NextResponse.json({ error: `This command requires ${requiredTier} access.` }, { status: 403 });
+  }
+  const maxTier = parseAgentTier(body.maxTier, access.tier);
+  if (!maxTier) {
+    return NextResponse.json({ error: "Invalid max tier" }, { status: 400 });
+  }
 
   const invokerUserId = stringProp(body, "invokerUserId") || "0";
+  const rateLimit = await resolveWorkflowRateLimit(invokerUserId);
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ error: rateLimit.reason }, { status: 429 });
+  }
+
   const replyTarget = parseReplyTarget(body.replyTarget);
   const rc = await getRuntimeConfig();
-  const tier = access.tier;
+  const tier = lowerTier(access.tier, maxTier);
   const system = await buildSystemPrompt(rc);
   const agentRunId = randomUUID();
   try {
@@ -77,6 +97,8 @@ export async function POST(request: Request) {
         modelId: rc.modelId,
         system,
         tier,
+        discordContext,
+        invokerUserId,
         replyTarget,
       },
     ]);
@@ -99,6 +121,21 @@ export async function POST(request: Request) {
     );
   }
   return NextResponse.json({ started: true, runId: run.runId, agentRunId, tier });
+}
+
+const TIER_RANK = {
+  public: 0,
+  verified: 1,
+  mod: 2,
+  admin: 3,
+} as const satisfies Record<AgentTier, number>;
+
+function tierMeetsMinimum(actual: AgentTier, required: AgentTier) {
+  return TIER_RANK[actual] >= TIER_RANK[required];
+}
+
+function lowerTier(actual: AgentTier, max: AgentTier) {
+  return TIER_RANK[actual] <= TIER_RANK[max] ? actual : max;
 }
 
 async function buildSystemPrompt(rc: Awaited<ReturnType<typeof getRuntimeConfig>>) {

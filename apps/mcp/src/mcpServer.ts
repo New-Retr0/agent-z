@@ -1,9 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as z from "zod/v4";
 import type { AppConfig } from "./config.js";
-import { discordRequest } from "./discordRest.js";
-import { assertGuildAllowed } from "./guildAllowlist.js";
-import { assertMcpNotDeletingVerifiedRole } from "./mcpRoleGuard.js";
+import {
+  assertGuildAllowed,
+  assertNotDeletingVerifiedRole,
+  discordRequest,
+  formatDiscordResponse,
+} from "@repo/discord-tools";
 
 const DISCORD_REST_CHEATSHEET = `Common REST (api v10) — also see Discord docs. Replace {guild.id} with your allowed guild.
 Read: GET /guilds/{guild.id}/channels, GET /guilds/{guild.id}/roles, GET /guilds/{guild.id}/members/{user_id}, GET /channels/{id}/messages?limit=50, GET /guilds/{guild.id}/audit-logs?limit=25.
@@ -20,22 +23,6 @@ const querySchema = z
     ])
   )
   .optional();
-
-function formatDiscordResponse(result: Awaited<ReturnType<typeof discordRequest>>) {
-  const rate = {
-    limit: result.headers["x-ratelimit-limit"],
-    remaining: result.headers["x-ratelimit-remaining"],
-    reset: result.headers["x-ratelimit-reset"],
-    scope: result.headers["x-ratelimit-scope"],
-    bucket: result.headers["x-ratelimit-bucket"],
-  };
-  const payload = {
-    status: result.status,
-    rateLimit: rate,
-    body: result.body,
-  };
-  return JSON.stringify(payload, null, 2);
-}
 
 export function createDiscordMcpServer(config: AppConfig) {
   const server = new McpServer({
@@ -74,7 +61,7 @@ export function createDiscordMcpServer(config: AppConfig) {
     },
     async ({ method, path, query, body, audit_reason }) => {
       assertGuildAllowed(path, config.allowedGuildIds);
-      assertMcpNotDeletingVerifiedRole(
+      assertNotDeletingVerifiedRole(
         method,
         path,
         config.reactionVerifiedRoleId,

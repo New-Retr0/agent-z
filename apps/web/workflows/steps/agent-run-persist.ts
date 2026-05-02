@@ -80,6 +80,19 @@ export async function stepPostAgentRunReply(
   }
 
   try {
+    if (replyTarget._type === "discord:Interaction") {
+      for (const chunk of formatDiscordChunks(agentRunId, text)) {
+        await postDiscordInteractionFollowup(replyTarget.applicationId, replyTarget.interactionToken, chunk);
+      }
+      return;
+    }
+    if (replyTarget._type === "discord:Channel") {
+      for (const chunk of formatDiscordChunks(agentRunId, text)) {
+        await postDiscordChannelMessage(replyTarget.channelId, chunk, replyTarget.messageId);
+      }
+      return;
+    }
+
     getBot().registerSingleton();
     const target =
       replyTarget._type === "chat:Thread"
@@ -94,7 +107,55 @@ export async function stepPostAgentRunReply(
   }
 }
 
-function formatDiscordChunks(agentRunId: string, text: string): string[] {
+async function postDiscordInteractionFollowup(applicationId: string, interactionToken: string, content: string) {
+  const response = await fetch(`https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}?wait=true`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      content,
+      flags: 64,
+      allowed_mentions: { parse: [] },
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Discord interaction follow-up failed: ${response.status} ${body.slice(0, 200)}`);
+  }
+}
+
+async function postDiscordChannelMessage(channelId: string, content: string, messageId?: string) {
+  const botToken = process.env.DISCORD_BOT_TOKEN?.trim();
+  if (!botToken) {
+    throw new Error("DISCORD_BOT_TOKEN is required to post Discord replies");
+  }
+
+  const body: Record<string, unknown> = {
+    content,
+    allowed_mentions: { parse: [] },
+  };
+  if (messageId) {
+    body.message_reference = {
+      message_id: messageId,
+      channel_id: channelId,
+      fail_if_not_exists: false,
+    };
+  }
+
+  const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bot ${botToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const responseBody = await response.text();
+    throw new Error(`Discord channel message failed: ${response.status} ${responseBody.slice(0, 200)}`);
+  }
+}
+
+export function formatDiscordChunks(agentRunId: string, text: string): string[] {
   const header = `**Agent Z result** (run \`${agentRunId.slice(0, 8)}...\`)\n\n`;
   const body = text.trim() || "The workflow completed, but no final text was returned.";
   const firstLimit = 1_900 - header.length;
