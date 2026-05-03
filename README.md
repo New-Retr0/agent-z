@@ -16,6 +16,7 @@ See **[AGENTS.md](./AGENTS.md)** for runbook detail (tunnels, production, MCP).
 | Path | Role |
 |------|------|
 | `apps/web` | Next.js app: `/api/discord`, `/api/workflow/invoke`, `/admin` |
+| `apps/gateway` | Tiny Discord Gateway relay that forwards replies/mentions to Vercel |
 | `apps/mcp` | Optional MCP server (Discord tools for Cursor) |
 | `packages/db` | Prisma schema + client |
 | `packages/config` | `env` + `runtime-config` (cached) |
@@ -28,20 +29,22 @@ See **[AGENTS.md](./AGENTS.md)** for runbook detail (tunnels, production, MCP).
 
 - `npm run build` — Turborepo production build
 - `npm run dev` — develop all workspaces
-- `npm run gateway` — optional long-lived Discord Gateway presence process, used only when you want the bot to appear online
+- `npm run gateway` — optional long-lived Discord Gateway relay for replies/mentions/reactions
 - `npm run mcp` — start `@repo/mcp` dev server (if configured)
 
 ## Discord Online Status
 
-The Vercel app uses Discord Interactions/webhooks, so it can respond to slash commands while the Discord member list shows the bot as offline. Discord only shows a bot as online when a long-lived Gateway WebSocket session is connected.
+The Vercel app uses Discord Interactions/webhooks for slash commands and buttons. Normal Discord replies, mentions, and reactions require Gateway events, so the optional Gateway process acts as a thin relay into `POST /api/discord`.
 
-For demos where online presence matters, run the optional Gateway presence process:
+For demos where reply/mention UX matters, run the optional Gateway relay:
 
 ```bash
 npm run gateway
 ```
 
-This process does not handle Agent Z logic; it only keeps the bot online and sets its activity. The agent behavior remains hosted on Vercel through `apps/web`.
+This process does not handle Agent Z logic. It forwards raw Gateway events to Vercel, keeps the bot online, and sets its activity. The AI, Workflow DevKit runs, admin UI, audit logs, and database state remain hosted in `apps/web`.
+
+Run only one Gateway owner for a bot token. Prefer `npm run gateway` for the competition demo; the Vercel `/api/discord/gateway` listener is a disabled fallback unless `ENABLE_VERCEL_GATEWAY_LISTENER=true` is set.
 
 ## License
 
