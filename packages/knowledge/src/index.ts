@@ -1,9 +1,18 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const _dir = dirname(fileURLToPath(import.meta.url));
 export const knowledgeDocsDir = join(_dir, "../docs");
+
+async function isKnowledgeDocsAvailable(): Promise<boolean> {
+  try {
+    const s = await stat(knowledgeDocsDir);
+    return s.isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 type KnowledgeIndexTopic = {
   id: string;
@@ -27,6 +36,9 @@ type CachedKnowledge = {
 let cached: CachedKnowledge | null = null;
 
 export async function listBundledDocPaths(): Promise<string[]> {
+  if (!(await isKnowledgeDocsAvailable())) {
+    return [];
+  }
   const entries = await readdir(knowledgeDocsDir, { withFileTypes: true });
   return entries
     .filter((e) => e.isFile() && (e.name.endsWith(".md") || e.name.endsWith(".mdx")))
@@ -48,6 +60,9 @@ export async function readKnowledgeIndex(): Promise<KnowledgeIndex> {
       generatedAt: parsed.generatedAt,
     };
   } catch {
+    if (!(await isKnowledgeDocsAvailable())) {
+      return { version: 1, topics: [] };
+    }
     const files = await listBundledDocPaths();
     return {
       version: 1,

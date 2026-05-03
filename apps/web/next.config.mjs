@@ -24,9 +24,10 @@ const nextConfig = {
   /**
    * `@repo/knowledge` reads markdown/json from `packages/knowledge/docs` at runtime.
    * Tracing does not follow those paths, so Vercel would omit them without an explicit include.
+   * Paths are resolved from this app directory (`apps/web`); one `../` would wrongly target `apps/packages/...`.
    */
   outputFileTracingIncludes: {
-    "/*": ["../packages/knowledge/docs/**/*"],
+    "/*": ["../../packages/knowledge/docs/**/*"],
   },
   /**
    * @discordjs/ws optional native zlib — avoids bundler resolve + node-gyp on Windows.
