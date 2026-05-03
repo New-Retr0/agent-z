@@ -17,9 +17,17 @@ const nextConfig = {
     "@repo/db",
     "@repo/agent",
     "@repo/chat-bot",
+    "@repo/knowledge",
   ],
   /** Monorepo: trace files from workspace root (single `next` install). */
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  /**
+   * `@repo/knowledge` reads markdown/json from `packages/knowledge/docs` at runtime.
+   * Tracing does not follow those paths, so Vercel would omit them without an explicit include.
+   */
+  outputFileTracingIncludes: {
+    "/*": ["../packages/knowledge/docs/**/*"],
+  },
   /**
    * @discordjs/ws optional native zlib — avoids bundler resolve + node-gyp on Windows.
    * Runtime: lazy import resolves to `null` (library already `.catch(() => null)`).
