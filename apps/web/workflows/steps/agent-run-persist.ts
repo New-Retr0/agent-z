@@ -82,7 +82,7 @@ export async function stepPostAgentRunReply(
 
   try {
     if (replyTarget._type === "discord:Interaction") {
-      for (const chunk of formatDiscordChunks(agentRunId, text, { includeRunId: true })) {
+      for (const chunk of formatDiscordChunks(agentRunId, text, { includeHeader: true })) {
         await postDiscordInteractionFollowup(replyTarget.applicationId, replyTarget.interactionToken, chunk);
       }
       return;
@@ -124,7 +124,7 @@ async function postDiscordInteractionFollowup(applicationId: string, interaction
   }
 }
 
-export function formatDiscordChunks(agentRunId: string, text: string, options?: { includeRunId?: boolean }): string[] {
-  const header = options?.includeRunId ? `**Agent Z result** (run \`${agentRunId.slice(0, 8)}...\`)\n\n` : "";
+export function formatDiscordChunks(agentRunId: string, text: string, options?: { includeHeader?: boolean }): string[] {
+  const header = options?.includeHeader ? "**Agent Z staff result**\n\n" : "";
   return formatChunks(text.trim() || "The workflow completed, but no final text was returned.", { header });
 }

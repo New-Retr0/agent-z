@@ -36,7 +36,7 @@ export function assertNotTargetingProtectedUser(
   const owner = protectedOwnerUserId;
   if (!owner) return;
 
-  if (path.includes(`/members/${owner}`) && path.includes("/roles/") && method === "DELETE") {
+  if (path.includes(`/members/${owner}`) && path.includes("/roles/") && (method === "PUT" || method === "DELETE")) {
     throw new ProtectedTargetError();
   }
   if (method === "DELETE" && new RegExp(`/guilds/\\d{17,20}/members/${owner}/?$`).test(path)) {

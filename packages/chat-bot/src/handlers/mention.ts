@@ -16,6 +16,9 @@ export function onMention(bot: Chat) {
     }
     const prompt = message.text?.trim();
     if (!prompt) {
+      await thread.post(
+        "I saw your reply, but Discord did not include the message text. Enable the bot's Message Content Intent in the Discord Developer Portal and set `AGENT_Z_MESSAGE_CONTENT_INTENT=1`, then restart the gateway."
+      );
       return;
     }
     await invokeFromMessage(thread, message, prompt);

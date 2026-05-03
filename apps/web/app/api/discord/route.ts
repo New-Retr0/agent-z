@@ -312,7 +312,7 @@ async function handleAgentZAdminInteraction(interaction: Record<string, unknown>
     await editOriginalInteraction(
       applicationId,
       token,
-      `**Agent Z admin** started with \`${payload.tier ?? "staff"}\` access (workflow \`${payload.runId ?? "unknown"}\`, run \`${String(payload.agentRunId ?? "").slice(0, 8)}...\`). I will post the final answer here privately.`,
+      "I'm on it. I'll send the staff-only answer here when it's ready.",
       EPHEMERAL_FLAG
     );
   } catch (error) {

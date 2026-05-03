@@ -128,6 +128,10 @@ describe("Discord route", () => {
       "https://discord.com/api/v10/webhooks/1495910562360594452/interaction-token/messages/@original",
       expect.objectContaining({ method: "PATCH" })
     );
+    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body))).toMatchObject({
+      content: "I'm on it. I'll send the staff-only answer here when it's ready.",
+      flags: 64,
+    });
     expect(mocks.discordWebhook).not.toHaveBeenCalled();
   });
 

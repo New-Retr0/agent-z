@@ -11,11 +11,11 @@ describe("formatDiscordChunks", () => {
     expect(chunks[0]).toContain("no final text was returned");
   });
 
-  it("can include a run header for private staff interaction replies", () => {
-    const chunks = formatDiscordChunks("12345678-1234-1234-1234-123456789012", "Done.", { includeRunId: true });
+  it("can include a staff header for private interaction replies without run ids", () => {
+    const chunks = formatDiscordChunks("12345678-1234-1234-1234-123456789012", "Done.", { includeHeader: true });
 
-    expect(chunks[0]).toContain("**Agent Z result**");
-    expect(chunks[0]).toContain("12345678");
+    expect(chunks[0]).toContain("**Agent Z staff result**");
+    expect(chunks[0]).not.toContain("12345678");
   });
 
   it("keeps Discord messages under the target chunk size", () => {

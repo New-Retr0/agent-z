@@ -143,6 +143,27 @@ describe("chat-bot handlers", () => {
     expect(thread.post).not.toHaveBeenCalled();
   });
 
+  it("explains empty subscribed replies instead of silently ignoring them", async () => {
+    const handlers: Array<(thread: any, message: any) => Promise<void>> = [];
+    onMention({ onNewMention: vi.fn(), onSubscribedMessage: vi.fn((handler) => handlers.push(handler)) } as any);
+    const thread = {
+      post: vi.fn(),
+      toJSON: vi.fn(() => ({
+        _type: "chat:Thread",
+        adapterName: "discord",
+        id: "thread",
+        channelId: "discord:guild:channel",
+        isDM: false,
+      })),
+    };
+    const message = { text: "", author: { userId: "user-1" }, raw: { id: "message", author: { bot: false } } };
+
+    await handlers[0](thread, message);
+
+    expect(mocks.invokeAgentDirect).not.toHaveBeenCalled();
+    expect(thread.post).toHaveBeenCalledWith(expect.stringContaining("Message Content Intent"));
+  });
+
   it("keeps DMs guild-only and does not invoke workflows", async () => {
     const handlers: Array<(thread: any) => Promise<void>> = [];
     onDirectMessage({ onDirectMessage: vi.fn((handler) => handlers.push(handler)) } as any);

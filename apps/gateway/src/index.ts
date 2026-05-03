@@ -11,9 +11,11 @@ config({ path: join(repoRoot, ".env") });
 config({ path: join(appRoot, ".env"), override: true });
 
 const token = requireEnv("DISCORD_BOT_TOKEN");
-const applicationId = requireEnv("DISCORD_APPLICATION_ID");
 const appBaseUrl = requireEnv("AGENT_Z_APP_BASE_URL").replace(/\/$/, "");
 const activity = process.env.AGENT_Z_GATEWAY_ACTIVITY?.trim() || "Agent Z";
+const useMessageContent = ["1", "true", "yes", "on"].includes(
+  (process.env.AGENT_Z_MESSAGE_CONTENT_INTENT ?? "").trim().toLowerCase()
+);
 
 const forwardedEvents = new Set(["MESSAGE_CREATE", "MESSAGE_REACTION_ADD", "MESSAGE_REACTION_REMOVE"]);
 const maxForwardAttempts = 3;
@@ -65,6 +67,22 @@ function requireEnv(name: string): string {
   return value;
 }
 
+/** Discord bot tokens encode the bot user snowflake in the segment before the first `.`. */
+function botUserIdFromToken(botToken: string): string | undefined {
+  const head = botToken.split(".")[0];
+  if (!head) {
+    return undefined;
+  }
+  try {
+    const decoded = Buffer.from(head, "base64").toString("utf8").trim();
+    return /^\d+$/.test(decoded) ? decoded : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const botUserIdCached = botUserIdFromToken(token);
+
 /**
  * This optional Gateway process is intentionally thin: it receives raw Discord
  * Gateway events and forwards them to the Vercel-hosted Chat SDK webhook.
@@ -74,18 +92,25 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.DirectMessageReactions,
+    ...(useMessageContent ? [GatewayIntentBits.MessageContent] : []),
   ],
   partials: [Partials.Channel, Partials.Message, Partials.Reaction],
 });
+
+function resolveBotUserSnowflake(): string {
+  return client.user?.id ?? botUserIdCached ?? "";
+}
 
 client.once(Events.ClientReady, (readyClient) => {
   readyClient.user.setActivity(activity, { type: ActivityType.Custom });
   console.log(`[Agent Z Gateway] online as ${readyClient.user.tag}`);
   console.log(`[Agent Z Gateway] forwarding Discord Gateway events to ${appBaseUrl}/api/discord`);
+  if (!useMessageContent) {
+    console.warn("[Agent Z Gateway] Message Content intent is disabled. Reply events can forward, but Discord may omit message text.");
+  }
   console.log("[Agent Z Gateway] AI, workflow, database, and admin behavior remain hosted on Vercel.");
 });
 
@@ -129,12 +154,16 @@ function normalizeGatewayData(eventType: string, data: unknown) {
   }
 
   const message = data as DiscordMessagePayload;
-  const isReplyToAgentZ = message.referenced_message?.author?.id === applicationId;
+  const botUserId = resolveBotUserSnowflake();
+  if (!botUserId) {
+    return data;
+  }
+
+  const isReplyToAgentZ = message.referenced_message?.author?.id === botUserId;
   const mentionsAgentZ = Boolean(
-    applicationId &&
-      (message.mentions?.some((mention) => mention.id === applicationId) ||
-        message.content?.includes(`<@${applicationId}>`) ||
-        message.content?.includes(`<@!${applicationId}>`))
+    message.mentions?.some((mention) => mention.id === botUserId) ||
+      message.content?.includes(`<@${botUserId}>`) ||
+      message.content?.includes(`<@!${botUserId}>`)
   );
 
   if (!isReplyToAgentZ && !mentionsAgentZ) {
