@@ -12,10 +12,10 @@ import { after } from "next/server";
  */
 export const runtime = "nodejs";
 
-/** Pro / Fluid: must exceed listener duration (10m). Hobby plans cannot run long enough for this. */
-export const maxDuration = 800;
+/** Vercel Hobby cap is 300s. Keep `LISTENER_MS` below this so the cron listener is not killed early. Pro/Fluid can raise limits in dashboard if you fork this route. */
+export const maxDuration = 300;
 
-const LISTENER_MS = 10 * 60 * 1000;
+const LISTENER_MS = 290 * 1000;
 
 type GatewayDiscordAdapter = {
   startGatewayListener: (
