@@ -1,0 +1,22 @@
+{
+  "name": "@repo/chat-bot",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/bot.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@chat-adapter/discord": "^4.26.0",
+    "@chat-adapter/state-pg": "^4.26.0",
+    "@repo/agent": "*",
+    "@repo/db": "*",
+    "chat": "^4.26.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

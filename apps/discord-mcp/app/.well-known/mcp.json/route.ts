@@ -1,0 +1,38 @@
+import { NextResponse } from "next/server";
+
+export const runtime = "nodejs";
+export const dynamic = "force-static";
+
+/**
+ * Lightweight MCP discovery document — points clients at the canonical Streamable-HTTP endpoint and
+ * advertises the auth scheme. Phase 9 promotes this to a full CIMD/OAuth manifest; for now it's a
+ * machine-readable hint plus a human-readable URL.
+ */
+export function GET(request: Request) {
+  const origin = new URL(request.url).origin;
+  return NextResponse.json({
+    name: "agent-z-discord-mcp",
+    version: "0.1.0",
+    description:
+      "Tier-gated Discord toolkit: read tools, mod-tier direct writes (messages, reactions, threads), admin-tier staged destructive actions (ban, channels, roles, bulk delete, AutoMod, emojis, webhooks). Channel/pinned/tier-matrix resources and mod-cockpit prompts. Used in-process by Agent Z and connectable from external MCP clients.",
+    transports: {
+      streamableHttp: `${origin}/api/mcp`,
+      sse: `${origin}/api/sse`,
+    },
+    authentication: {
+      type: "bearer",
+      header: "Authorization: Bearer <MCP_API_KEY>",
+      actorHeaders: [
+        "X-Actor-Discord-User-Id",
+        "X-Actor-Discord-Guild-Id",
+        "X-Actor-Discord-Channel-Id",
+        "X-Actor-Discord-Role-Ids",
+        "X-Actor-Discord-Is-Dm",
+        "X-Agent-Z-Interaction-Token",
+        "X-Agent-Z-Interaction-Application-Id",
+      ],
+    },
+    notes:
+      "Bearer auth is the v1 surface. Phase 9 of the rebuild plan upgrades this to MCP OAuth 2.1 with the .well-known/oauth-protected-resource manifest already shipped at the sibling route.",
+  });
+}

@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.turbo
+.next
+bot/dist/
+.env
+.env.local
+.env.*.local
+*.log
+runtime/
+apps/web/.env
+apps/discord-mcp/.env
+apps/gateway/.env
+.vercel
+
+# Per-app env/ folders: commit only .env.example; ignore local drops
+apps/*/env/*
+!apps/*/env/.env.example
