@@ -303,16 +303,18 @@ export async function runAgentZ(input: RunAgentZInput): Promise<RunAgentZResult>
       messages,
     });
 
-    let text = result.text.trim() || "I could not produce a useful answer.";
-    text = truncateDiscordReply(
-      text,
-      surface === "public" ? DISCORD_PUBLIC_REPLY_MAX_CHARS : DISCORD_ADMIN_REPLY_MAX_CHARS
-    );
+    const rawText = result.text.trim() || "I could not produce a useful answer.";
+    const replyMax =
+      surface === "public" ? DISCORD_PUBLIC_REPLY_MAX_CHARS : DISCORD_ADMIN_REPLY_MAX_CHARS;
     const stagedPaToken =
-      extractPaTokenFromGenerateTextResult(result) ?? extractPaTokenFromAssistantText(text) ?? undefined;
+      extractPaTokenFromGenerateTextResult(result) ??
+      extractPaTokenFromAssistantText(rawText) ??
+      undefined;
 
-    if (surface === "admin" && !stagedPaToken && impliesStagingWasClaimedWithoutToken(text)) {
+    let text = truncateDiscordReply(rawText, replyMax);
+    if (surface === "admin" && !stagedPaToken && impliesStagingWasClaimedWithoutToken(rawText)) {
       text = `${stripMisleadingButtonPromises(text)}${stagingMismatchFooter(discordToolsOffered)}`.trim();
+      text = truncateDiscordReply(text, replyMax);
     }
     // Best-effort: record the assistant turn so future invocations see it.
     if (channelId) {
