@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/scheduled-msgs",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/embed-batch",
+      "schedule": "* * * * *"
     }
   ]
 }

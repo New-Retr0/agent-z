@@ -32,6 +32,12 @@ import {
   type UserProfileSnapshot,
 } from "@repo/db";
 import { resolveDiscordAccess } from "@/lib/discord-access";
+import {
+  closeContext7Client,
+  isContext7Configured,
+  openContext7Client,
+  type Context7Connection,
+} from "./context7-mcp";
 
 export type RunAgentZInput = {
   prompt: string;
@@ -107,20 +113,27 @@ function buildSystemPrompt(args: {
   invokerUserId: string;
   invokerProfile: UserProfileSnapshot | null;
   recentTurnsBlock: string;
+  context7Available: boolean;
 }): string {
   const base =
     args.override?.trim() ||
-    "You are Agent Z, a helpful Discord moderation and community assistant for this server.";
+    "You are Agent Z, a Vercel-stack expert and Discord moderation/community assistant for this server. You specialize in helping with Vercel, Next.js, the AI SDK, Vercel Workflow, Vercel Sandbox, and the broader Vercel platform — and you operate the server itself through tier-gated Discord tools.";
+  const context7Block = args.context7Available
+    ? `- Vercel-expert grounding: a Context7 MCP transport is connected. For ANY question about Vercel, Next.js, the AI SDK, Vercel Workflow, Drizzle, Tailwind, shadcn/ui, or other libraries Context7 indexes, call \`resolve-library-id\` first, then \`get-library-docs\` to ground your answer in the live docs. Quote short snippets and cite the library id you used. Do not answer Vercel/Next.js questions from memory if Context7 is reachable.
+- Vercel Agent Skills: when the question maps to a known Vercel domain (auth, integrations, deployments, AI SDK, workflows), pick the Context7 library most likely to cover it (e.g. \`vercel/next.js\`, \`vercel/ai\`, \`vercel/workflow\`, \`shadcn-ui/ui\`) before resolving. Prefer the Vercel-canonical library when multiple resolve.`
+    : `- Vercel-expert grounding: Context7 docs lookup is currently unavailable. Answer Vercel/Next.js questions from your training but say "based on what I know — please double-check the Vercel docs" so users know it isn't live-grounded.`;
   return `${base}
 
 Operating context:
 - Resolved tier: ${args.tier}
 - Invoker user id: ${args.invokerUserId}
 - You can call Discord tools through the MCP connection. The MCP server has already filtered the tool set to what this caller is allowed to use; if a tool you would expect is missing, the caller does not have permission for it. Do not pretend you ran a tool you cannot see.
+${context7Block}
 - Always cite message IDs and timestamps when referring to specific Discord events.
 - Never invent server data. If a tool result is empty or ambiguous, say so.
 - Destructive admin tools (bulk_delete_messages, role removals) require an explicit human confirmation via MCP elicitation. If the client doesn't confirm, abort.
 - You DO have persistent memory across conversations: the most recent turns and the invoker's profile are loaded into this prompt every time. When the user says "remember that…", you should call the remember_about_user MCP tool (verified+ tier) to persist it, not just acknowledge it.
+- For "find that conversation about X" / "when did Y come up" type questions, use the \`search_server_messages\` MCP tool (Oversight Layer — pgvector semantic search). For "show me what @user posted" use \`find_user_messages\`. For "summarize this channel" use \`summarize_channel_activity\` then summarize the returned messages yourself.
 - If the user asks to be forgotten, instruct them to run /forget-me; do not try to wipe data through tool calls.
 - Replies are posted into Discord, so format them concisely. Use short paragraphs and inline code spans where useful. Avoid headers and giant code blocks unless the user explicitly asked for them.
 
@@ -205,6 +218,7 @@ export async function runAgentZ(input: RunAgentZInput): Promise<RunAgentZResult>
         .join("\n")
     : "(no prior turns in this channel)";
   const model = createGateway({ apiKey: env.AI_GATEWAY_API_KEY })(rc.modelId);
+  const context7Configured = isContext7Configured();
   const system = buildSystemPrompt({
     tier,
     knowledge,
@@ -212,6 +226,7 @@ export async function runAgentZ(input: RunAgentZInput): Promise<RunAgentZResult>
     invokerUserId: input.invokerUserId,
     invokerProfile,
     recentTurnsBlock,
+    context7Available: context7Configured,
   });
 
   // Record the user turn up front so it shows up on the next call even if the agent fails.
@@ -225,13 +240,29 @@ export async function runAgentZ(input: RunAgentZInput): Promise<RunAgentZResult>
     console.error("[agent-z] Failed to record user turn:", error);
   });
 
-  const mcp = await getMcpClientOrNull(input.invokerUserId, input.discordContext);
-  let tools: Awaited<ReturnType<NonNullable<typeof mcp>["tools"]>> | undefined;
+  const [mcp, context7] = await Promise.all([
+    getMcpClientOrNull(input.invokerUserId, input.discordContext),
+    context7Configured ? openContext7Client() : Promise.resolve<Context7Connection | null>(null),
+  ]);
+
+  // Merge tools from both MCP transports onto a single tool map. Discord MCP
+  // owns the `agent-z-*` namespace; Context7 provides `resolve-library-id` /
+  // `get-library-docs`. Tool names don't collide.
+  let tools: Record<string, unknown> = {};
   if (mcp) {
     try {
-      tools = await mcp.tools();
+      const discordTools = await mcp.tools();
+      tools = { ...tools, ...(discordTools as Record<string, unknown>) };
     } catch (error) {
-      console.error("[agent-z] Failed to list MCP tools:", error);
+      console.error("[agent-z] Failed to list Discord MCP tools:", error);
+    }
+  }
+  if (context7) {
+    try {
+      const context7Tools = await context7.client.tools();
+      tools = { ...tools, ...(context7Tools as Record<string, unknown>) };
+    } catch (error) {
+      console.error("[agent-z] Failed to list Context7 MCP tools:", error);
     }
   }
 
@@ -283,5 +314,6 @@ export async function runAgentZ(input: RunAgentZInput): Promise<RunAgentZResult>
         // best-effort close
       }
     }
+    await closeContext7Client(context7);
   }
 }

@@ -179,6 +179,36 @@ model ScheduledMessage {
   @@map("scheduled_message")
 }
 
+/// Append-only archive of every Discord message the gateway forwards. Powers
+/// the Oversight Layer: tier-gated semantic search, channel summaries,
+/// referenced-message lookup, and audit trails. Embeddings are populated
+/// asynchronously by /api/cron/embed-batch from the Redis Streams queue.
+/// The embedding column is pgvector(1536); Prisma reads/writes it via raw SQL.
+model Message {
+  id                  String    @id
+  channelId           String    @map("channel_id")
+  guildId             String?   @map("guild_id")
+  authorId            String    @map("author_id")
+  authorName          String?   @map("author_name")
+  authorIsBot         Boolean   @default(false) @map("author_is_bot")
+  content             String    @default("") @db.Text
+  referencedMessageId String?   @map("referenced_message_id")
+  attachments         Json      @default("[]")
+  mentionUserIds      String[]  @default([]) @map("mention_user_ids")
+  embeddingModel      String?   @map("embedding_model")
+  embeddedAt          DateTime? @map("embedded_at")
+  sentAt              DateTime  @map("sent_at")
+  editedAt            DateTime? @map("edited_at")
+  deletedAt           DateTime? @map("deleted_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  @@index([channelId, sentAt])
+  @@index([guildId, sentAt])
+  @@index([authorId, sentAt])
+  @@index([embeddedAt])
+  @@map("message")
+}
+
 /// Tracks reaction-role / verification grants so we can audit and revoke.
 model VerificationGrant {
   id                 String    @id @default(cuid())

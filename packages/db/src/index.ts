@@ -12,3 +12,5 @@ export type { Prisma } from "@prisma/client";
 export { PrismaClient } from "@prisma/client";
 
 export * from "./memory";
+export * from "./messages";
+export * from "./embed-queue";

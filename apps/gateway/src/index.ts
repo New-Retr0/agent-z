@@ -18,6 +18,13 @@ const useMessageContent = ["1", "true", "yes", "on"].includes(
 );
 
 const forwardedEvents = new Set(["MESSAGE_CREATE", "MESSAGE_REACTION_ADD", "MESSAGE_REACTION_REMOVE"]);
+const oversightForwardedEvents = new Set(["MESSAGE_CREATE", "MESSAGE_UPDATE", "MESSAGE_DELETE"]);
+const oversightEnabled = ["1", "true", "yes", "on"].includes(
+  (process.env.AGENT_Z_OVERSIGHT_ENABLED ?? "").trim().toLowerCase()
+);
+const oversightIncludeBots = ["1", "true", "yes", "on"].includes(
+  (process.env.AGENT_Z_OVERSIGHT_INCLUDE_BOTS ?? "").trim().toLowerCase()
+);
 const maxForwardAttempts = 3;
 
 type RawGatewayPacket = {
@@ -108,6 +115,11 @@ client.once(Events.ClientReady, (readyClient) => {
   readyClient.user.setActivity(activity, { type: ActivityType.Custom });
   console.log(`[Agent Z Gateway] online as ${readyClient.user.tag}`);
   console.log(`[Agent Z Gateway] forwarding Discord Gateway events to ${appBaseUrl}/api/discord`);
+  if (oversightEnabled) {
+    console.log(
+      `[Agent Z Gateway] Oversight ingestion ENABLED — also forwarding MESSAGE_CREATE/UPDATE/DELETE to ${appBaseUrl}/api/discord/oversight (include bots: ${oversightIncludeBots})`
+    );
+  }
   if (!useMessageContent) {
     console.warn("[Agent Z Gateway] Message Content intent is disabled. Reply events can forward, but Discord may omit message text.");
   }
@@ -124,9 +136,28 @@ client.on(Events.Error, (error) => {
 
 async function handleRawPacket(packet: RawGatewayPacket) {
   const eventType = packet.t;
-  if (!eventType || !forwardedEvents.has(eventType)) {
-    return;
+  if (!eventType) return;
+
+  // Oversight tee: forwards EVERY MESSAGE_CREATE/UPDATE/DELETE (optionally
+  // including bot output) to /api/discord/oversight independently of the
+  // chat-bot mention forwarding below. This populates the message archive.
+  if (oversightEnabled && oversightForwardedEvents.has(eventType)) {
+    const dataForOversight = packet.d;
+    if (
+      eventType === "MESSAGE_CREATE" &&
+      !oversightIncludeBots &&
+      isBotMessage(dataForOversight)
+    ) {
+      // Skip bot messages when configured.
+    } else {
+      void forwardGatewayEvent(
+        { type: `GATEWAY_${eventType}`, timestamp: Date.now(), data: dataForOversight },
+        `${appBaseUrl}/api/discord/oversight`
+      );
+    }
   }
+
+  if (!forwardedEvents.has(eventType)) return;
 
   const data = normalizeGatewayData(eventType, packet.d);
   if (eventType === "MESSAGE_CREATE" && isBotMessage(data)) {
@@ -201,11 +232,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-async function forwardGatewayEvent(event: { type: string; timestamp: number; data: unknown }) {
+async function forwardGatewayEvent(
+  event: { type: string; timestamp: number; data: unknown },
+  destination: string = `${appBaseUrl}/api/discord`
+) {
   const message = summarizeEvent(event.data);
   for (let attempt = 1; attempt <= maxForwardAttempts; attempt += 1) {
     try {
-      const response = await fetch(`${appBaseUrl}/api/discord`, {
+      const response = await fetch(destination, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -216,6 +250,7 @@ async function forwardGatewayEvent(event: { type: string; timestamp: number; dat
 
       console.log("[Agent Z Gateway] forwarded event", {
         type: event.type,
+        destination,
         attempt,
         status: response.status,
         ...message,
@@ -227,6 +262,7 @@ async function forwardGatewayEvent(event: { type: string; timestamp: number; dat
     } catch (error) {
       console.error("[Agent Z Gateway] forward failed", {
         type: event.type,
+        destination,
         attempt,
         error: error instanceof Error ? error.message : String(error),
         ...message,
