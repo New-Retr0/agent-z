@@ -70,7 +70,7 @@ export async function formatAgentZWhyDebugMarkdown(args: {
     `- **MCP introspect**: ${mcp.available ? `${mcp.tools.length} tools` : `unavailable (${mcp.error ?? "unknown"})`}`,
     `- **Oversight archive**: ${oversight ? `total=${oversight.total} embedded=${oversight.embedded} pending_embed=${oversight.pending}` : "(stats unavailable)"}`,
     "",
-    "**Semantic recall preview** (same pipeline as host-injected recall):",
+    "**Semantic recall preview** (same retrieval as appended **system** block when recall gate passes):",
     "```",
     recallPreview,
     "```",

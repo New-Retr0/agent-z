@@ -12,8 +12,8 @@ export type OversightRecallHit = {
 };
 
 const CACHE_TTL_SEC = 60;
-const SNIPPET_CHARS = 140;
-const SIM_THRESHOLD = 0.52;
+const SNIPPET_CHARS = 120;
+const SIM_THRESHOLD = 0.58;
 
 function redisOptional(): Redis | null {
   try {
@@ -32,12 +32,17 @@ function cacheKey(query: string, channelId: string | null | undefined, guildId: 
   return `agent-z:recall:${h}`;
 }
 
-/** Gate cheap noise — archive recall runs only when true (plan default). */
+/** Gate cheap noise — archive recall runs only when likely to help (not confuse). */
 export function shouldRunSemanticRecall(userPrompt: string): boolean {
   const t = userPrompt.trim();
   if (t.length < 8) return false;
   const lower = t.toLowerCase();
   if (lower === "help" || lower.startsWith("/help")) return false;
+  // Semantic snippets rarely answer aggregate/count questions — they mostly add contradictory noise.
+  if (/\bhow\s+many\b/i.test(lower)) return false;
+  if (/\b(count|counting)\b/i.test(lower) && /\b(message|messages|msg|msgs)\b/i.test(lower)) return false;
+  if (/\b(number|total)\s+of\b/i.test(lower) && /\b(message|messages)\b/i.test(lower)) return false;
+  if (/\bhow\s+much\b/i.test(lower) && /\b(i|me|my)\s+(posted|sent|said|wrote)\b/i.test(lower)) return false;
   return true;
 }
 
@@ -115,7 +120,7 @@ export function formatRecallBlock(hits: OversightRecallHit[]): string {
   if (hits.length === 0) return "";
   const lines = hits.map(
     (h, i) =>
-      `${i + 1}. sim=${h.similarity.toFixed(2)} ch=${h.channelId} msg=${h.id} @ ${h.sentAt}\n   ${h.excerpt}`
+      `${i + 1}. sim=${h.similarity.toFixed(2)} ch=${h.channelId} msg=${h.id} @ ${h.sentAt}\n   EXCERPT: ${h.excerpt}`
   );
-  return `[Oversight archive snippets — similarity-ranked; verify with tools if critical]\n${lines.join("\n")}`;
+  return `### Oversight archive (machine retrieval — NOT user dialogue)\nSimilarity-ranked excerpts only. Do not attribute them to the user or narrate them as conversation.\n${lines.join("\n")}`;
 }

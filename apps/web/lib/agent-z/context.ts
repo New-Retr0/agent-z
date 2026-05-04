@@ -41,7 +41,8 @@ export function formatProfileBlock(profile: UserProfileSnapshot | null): string 
     ? prefsKeys.map((k) => `  - ${k}: ${JSON.stringify(profile.preferences[k])}`).join("\n")
     : "  (no preferences recorded)";
   const lastSeen = profile.lastSeenAt ? profile.lastSeenAt.toISOString() : "never recorded";
-  return `Display name: ${profile.displayName ?? "unknown"}
+  return `(Operator-maintained hints — not verified transcript; do not invent user confirmations from these lines.)
+Display name: ${profile.displayName ?? "unknown"}
 Last seen: ${lastSeen}
 Notes:
 ${notesBlock}
