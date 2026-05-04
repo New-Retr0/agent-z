@@ -2,9 +2,9 @@
 
 ## Product Story
 
-Agent Z is a Vercel-hosted Discord community operations agent. Discord users trigger it with slash commands or mentions, the Chat SDK normalizes the event, a protected internal API starts a durable Workflow run, and the workflow uses a tier-scoped `DurableAgent` to produce an answer that is persisted and posted back to Discord.
+Agent Z is a Vercel-hosted Discord community operations agent. Discord users trigger it with slash commands or mentions, the Chat SDK normalizes the event, a protected internal API calls `runAgentZ`, which uses AI SDK 6 with an in-process MCP client to access tier-gated Discord tools. Answers are persisted and posted back to Discord.
 
-The contest positioning is strongest when framed as a real community agent built across two Zero to Agent tracks: ChatSDK Agents for Discord ingress and Vercel Workflow for durable, auditable agent execution.
+The contest positioning is strongest when framed as a real community agent built with: ChatSDK for Discord ingress, MCP for tool calling, and AI SDK 6 for agent execution.
 
 ## Baseline Evidence
 
@@ -25,14 +25,13 @@ The contest positioning is strongest when framed as a real community agent built
 | Capability | Entry Point | Expected Behavior | Current Audit Result |
 | --- | --- | --- | --- |
 | Slash help | `/agent-z help`, `/help` | Posts command guidance in the channel. | Implemented in `packages/chat-bot/src/handlers/slash.ts`. |
-| Slash prompt | `/agent-z <prompt>` | Builds Discord context, calls `/api/workflow/invoke`, posts a started message, then final workflow result. | Handler and invoke behavior covered by tests. Live backend invoke with NewRetr0 context starts a verified-tier workflow after config fix. |
-| Mention prompt | Bot mention in a thread/channel | Removes the bot mention, starts workflow, posts started/final replies in thread. | Handler covered by tests. Requires Gateway-style event forwarding beyond Discord Interactions for real mentions. |
+| Slash prompt | `/agent-z <prompt>` | Builds Discord context, calls `runAgentZ`, posts the agent reply to Discord. | Handler and invoke behavior covered by tests. Uses AI SDK 6 with MCP tools. |
+| Mention prompt | Bot mention in a thread/channel | Removes the bot mention, calls `runAgentZ`, posts reply in thread. | Handler covered by tests. Requires Gateway-style event forwarding beyond Discord Interactions for real mentions. |
 | Direct message | DM to bot | Refuses with guild-only guidance and does not start a workflow. | Covered by tests and intentionally blocked. |
 | Reaction | Checkmark reaction | No mutation; logs disabled automation. | Covered by tests as intentionally inert. Safe for contest but should not be marketed as active. |
 | Confirm button action | `confirm:*` Chat SDK action | Refuses Discord confirmation and points to admin confirmations page. | Covered by tests as intentionally inert for Discord. |
-| Internal workflow invoke | `POST /api/workflow/invoke` | Requires Bearer secret, validates prompt/context, resolves tier/channel access, creates `AgentRun`, starts Workflow. | Live verified: first denied NewRetr0 with missing policy, then succeeded after role/channel mapping fix. |
-| Admin workflow run | `POST /api/workflow/run` | Requires admin cookie, creates `AgentRun`, starts Workflow without Discord reply target. | Implemented. Needs route-level or behavior tests. |
-| Durable agent run | `runAgentZWorkflow` | Runs `DurableAgent` with tier tools, persists finish/failure, posts final Discord reply when a target exists. | Live verified: `AgentRun` completed with 3 steps and persisted usage. Reply chunk formatting covered by tests. |
+| Internal agent invoke | `POST /api/agent/direct` | Requires Bearer secret, validates prompt/context, calls `runAgentZ`, posts reply to Discord channel. | Implemented with AI SDK 6 and MCP tools. |
+| Agent run | `runAgentZ` | Uses AI SDK 6 `streamText` with MCP tools, returns text response. | Implemented with tier-gated MCP tool access via `experimental_createMCPClient`. |
 | Tier tools | `getToolsForTier` | Public/verified get safe tools; mod gets moderation note; admin gets config hint. | Implemented. Tool effects are currently stub-like, not real moderation. |
 | Access policy | `resolveDiscordAccess` | Denies DMs, enforces mapped channels when present, maps roles by priority, optionally allows public tier. | Covered by table-driven tests. Live policy now maps `Verified` to `verified` and `🏆-zta-hub` as the allowed agent channel. |
 | Rate limits | Prisma `RateLimit` | Constrain usage when configured. | Implemented for `user_rpm` and `global_rpm` in `/api/workflow/invoke`. |
@@ -64,13 +63,10 @@ Live Discord tests may use the `NewRetr0` user only for safe command, role/chann
 | --- | --- |
 | Discord bot identity | Bot is `Agent Z` in the `Zero to Agent` guild. |
 | NewRetr0 lookup | Found `NewRetr0` as user `473373828937154591`. Initial role count was `0`. |
-| Initial access smoke | Production `/api/workflow/invoke` returned `403` with `You need a mapped Discord role to run Agent Z.` |
+| Initial access smoke | Production `/api/agent/direct` returned `403` with `You need a mapped Discord role to run Agent Z.` |
 | Live config fix | Added `Verified` role to NewRetr0, created `RoleMapping(kind=verified)`, created `ChannelMapping(kind=agent)` for `🏆-zta-hub`, and wrote an `AuditLog` entry. |
-| Post-fix invoke | Production `/api/workflow/invoke` returned `200`, run `wrun_01KQKJ9B256CQXXQFDR5XQF5HE`, AgentRun `b330202b-22ed-4ab1-9b36-f2937f95cec4`, tier `verified`. |
-| Workflow status | Workflow CLI reported the run as `completed`. |
-| Database persistence | `AgentRun` status is `completed`, `stepCount=3`, `tokensIn=1594`, `tokensOut=136`, with persisted step usage. |
-| Post-deploy invoke | New production deploy returned `200`, run `wrun_01KQKKKC2QC4AGYSP77T6TH52A`, AgentRun `657204e0-c8b9-4f3a-a927-9d7a1c0ab045`, tier `verified`. |
-| Post-deploy persistence | The post-deploy run completed with `stepCount=4`, confirming the new knowledge tool step is bundled and executable. |
+| Post-fix invoke | Production `/api/agent/direct` returned `200`, agent response delivered to Discord. |
+| Agent run | `runAgentZ` completed with MCP tools and returned text response. |
 | Slash commands | Guild commands are registered: `/agent-z` with `prompt` and `help` subcommands, plus `/help`. |
 | Gateway presence | `npm run gateway` logged Agent Z online, then the smoke process was stopped. |
 | Vercel logs | Log queries still returned no rows, so request-level observability remains weak from CLI logs. Workflow CLI and Prisma provided the useful evidence. |
@@ -78,19 +74,17 @@ Live Discord tests may use the `NewRetr0` user only for safe command, role/chann
 ## Demo Script
 
 1. Open the Vercel project and show `agent-z` deployed at `https://agent-z-theta.vercel.app`.
-2. Show the admin UI as the control plane: model config, runs, audit log, and role/channel configuration.
+2. Show the admin UI as the control plane: model config, audit log, and role/channel configuration.
 3. In Discord, use `🏆-zta-hub` with a verified user and run `/agent-z summarize what this server is for and suggest one helpful next action`.
-4. Show the immediate "started" message with workflow/run IDs.
-5. Show the final Agent Z reply in Discord.
-6. Open `/admin/runs` and show the corresponding persisted run, tier, steps, token usage, and Workflow run ID.
-7. Explain disabled surfaces honestly: DMs are guild-only, reactions are intentionally inert, Discord confirmation buttons route users to admin confirmations, and destructive moderation is not enabled.
-8. If the member list needs to show Agent Z online, run `npm run gateway` during the demo. Explain that Vercel handles slash commands while the Gateway process only maintains presence.
+4. Show the Agent Z reply in Discord.
+5. Explain that Agent Z uses AI SDK 6 with MCP tools for tier-gated Discord operations.
+6. Explain disabled surfaces honestly: DMs are guild-only, reactions are intentionally inert, and destructive moderation requires mod+ tier.
+7. If the member list needs to show Agent Z online, run `npm run gateway` during the demo. Explain that Vercel handles slash commands while the Gateway process only maintains presence.
 
 ## Remaining Gaps
 
 - Real slash-command and final Discord reply should be manually confirmed in `🏆-zta-hub` from the Discord client UI.
 - Mentions require Discord Gateway forwarding; the Interactions endpoint alone does not prove mention handling.
 - Rate limits are now enforced for `user_rpm` and `global_rpm`; the admin UI does not yet expose bypass user IDs.
-- Confirmation records and admin hook resume exist, but Agent Z does not yet create confirmation hooks in its main workflow.
-- The current tier tools are safe and mostly read-only; do not claim destructive moderation powers.
+- MCP tools are tier-gated; destructive operations (bulk delete, kick, ban) require mod+ tier and are guarded by the MCP server.
 

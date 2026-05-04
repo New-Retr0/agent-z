@@ -1,8 +1,7 @@
 import { getBot } from "@repo/chat-bot";
 import { after, NextResponse } from "next/server";
 import { verifyKey } from "discord-interactions";
-import { runDirectAgentZ } from "@/lib/agent-z/direct";
-import { handleWorkflowAction, parseWorkflowActionCustomId } from "@/lib/agent-z/workflow-actions";
+import { runAgentZ } from "@/lib/agent-z/run";
 
 export const runtime = "nodejs";
 
@@ -48,29 +47,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ type: RESPONSE_TYPE.Pong });
     }
 
-    const workflowAction = getWorkflowAction(interaction);
-    if (workflowAction && interaction) {
-      const signatureValid = await verifyDiscordSignature(request, bodyBytes);
-      if (!signatureValid) {
-        return new Response("Invalid signature", { status: 401 });
-      }
-      const invokerUserId = extractInvokerUserId(interaction);
-      if (!invokerUserId) {
-        return NextResponse.json({
-          type: RESPONSE_TYPE.ChannelMessageWithSource,
-          data: { flags: EPHEMERAL_FLAG, content: "Could not read your Discord user id." },
-        });
-      }
-      after(handleAgentZWorkflowAction(interaction, workflowAction, invokerUserId));
-      return NextResponse.json({ type: RESPONSE_TYPE.DeferredUpdateMessage });
-    }
-
     if (isAgentZAdminInteraction(interaction)) {
       const signatureValid = await verifyDiscordSignature(request, bodyBytes);
       if (!signatureValid) {
         return new Response("Invalid signature", { status: 401 });
       }
-      after(handleAgentZAdminInteraction(interaction, request));
+      after(handleAgentZAdminInteraction(interaction));
       return NextResponse.json({
         type: RESPONSE_TYPE.DeferredChannelMessageWithSource,
         data: { flags: EPHEMERAL_FLAG },
@@ -173,74 +155,16 @@ async function handleAgentZPublicSlashInteraction(interaction: Record<string, un
   }
 
   try {
-    const result = await runDirectAgentZ({
+    const result = await runAgentZ({
       prompt: args,
       invokerUserId,
       discordContext: getNativeDiscordContext(interaction),
-      replyTarget: {
-        _type: "discord:Channel",
-        channelId,
-      },
     });
-
-    if (result.kind === "workflowProposal") {
-      await editOriginalInteraction(
-        applicationId,
-        token,
-        result.text,
-        0,
-        result.components
-      );
-      return;
-    }
 
     await editOriginalInteraction(applicationId, token, result.text, 0);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await editOriginalInteraction(applicationId, token, `**Agent Z** could not answer: ${message}`, 0);
-  }
-}
-
-function getWorkflowAction(interaction: Record<string, unknown> | null) {
-  if (!interaction || interaction.type !== INTERACTION_TYPE.MessageComponent) {
-    return null;
-  }
-  const data = recordProp(interaction, "data");
-  const customId = stringProp(data, "custom_id");
-  return parseWorkflowActionCustomId(customId);
-}
-
-async function handleAgentZWorkflowAction(
-  interaction: Record<string, unknown>,
-  workflowAction: { action: "start" | "cancel"; token: string },
-  invokerUserId: string
-) {
-  const applicationId = process.env.DISCORD_APPLICATION_ID?.trim();
-  const token = stringProp(interaction, "token");
-  if (!applicationId || !token) {
-    return;
-  }
-
-  try {
-    const result = await handleWorkflowAction({
-      action: workflowAction.action,
-      token: workflowAction.token,
-      userId: invokerUserId,
-    });
-    if (result.ephemeral) {
-      await postInteractionFollowup(applicationId, token, result.text, EPHEMERAL_FLAG);
-      return;
-    }
-    await editOriginalInteraction(
-      applicationId,
-      token,
-      result.text,
-      result.ephemeral ? EPHEMERAL_FLAG : 0,
-      result.components
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await editOriginalInteraction(applicationId, token, `**Agent Z** could not update that workflow: ${message}`, 0, []);
   }
 }
 
@@ -264,14 +188,13 @@ async function postInteractionFollowup(
   }
 }
 
-async function handleAgentZAdminInteraction(interaction: Record<string, unknown>, request: Request) {
+async function handleAgentZAdminInteraction(interaction: Record<string, unknown>) {
   const applicationId = process.env.DISCORD_APPLICATION_ID?.trim();
-  const internalSecret = process.env.AGENT_Z_INTERNAL_SECRET?.trim();
   const token = stringProp(interaction, "token");
   const action = extractSlashText(interaction).trim();
   const invokerUserId = extractInvokerUserId(interaction);
 
-  if (!applicationId || !internalSecret || !token) {
+  if (!applicationId || !token) {
     await editOriginalInteraction(applicationId, token, "**Agent Z admin** is not configured.", EPHEMERAL_FLAG);
     return;
   }
@@ -281,43 +204,15 @@ async function handleAgentZAdminInteraction(interaction: Record<string, unknown>
   }
 
   try {
-    const response = await fetch(new URL("/api/workflow/invoke", request.url), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${internalSecret}`,
-      },
-      body: JSON.stringify({
-        prompt: action,
-        invokerUserId,
-        discordContext: getNativeDiscordContext(interaction),
-        replyTarget: {
-          _type: "discord:Interaction",
-          applicationId,
-          interactionToken: token,
-        },
-        requiredTier: "mod",
-      }),
+    const result = await runAgentZ({
+      prompt: action,
+      invokerUserId,
+      discordContext: getNativeDiscordContext(interaction),
     });
-    const payload = await readJson(response);
-    if (!response.ok) {
-      await editOriginalInteraction(
-        applicationId,
-        token,
-        `**Agent Z admin** could not start: ${payload.error ?? response.status}`,
-        EPHEMERAL_FLAG
-      );
-      return;
-    }
-    await editOriginalInteraction(
-      applicationId,
-      token,
-      "I'm on it. I'll send the staff-only answer here when it's ready.",
-      EPHEMERAL_FLAG
-    );
+    await editOriginalInteraction(applicationId, token, result.text, EPHEMERAL_FLAG);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await editOriginalInteraction(applicationId, token, `**Agent Z admin** could not start: ${message}`, EPHEMERAL_FLAG);
+    await editOriginalInteraction(applicationId, token, `**Agent Z admin** could not process: ${message}`, EPHEMERAL_FLAG);
   }
 }
 
@@ -343,16 +238,6 @@ async function editOriginalInteraction(
   });
   if (!response.ok) {
     console.error("[api/discord] edit original interaction failed", response.status, await response.text());
-  }
-}
-
-async function readJson(response: Response): Promise<Record<string, unknown>> {
-  const text = await response.text();
-  try {
-    const parsed = JSON.parse(text);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return text ? { error: text } : {};
   }
 }
 

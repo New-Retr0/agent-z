@@ -8,8 +8,7 @@ const mocks = vi.hoisted(() => ({
   }),
   verifyKey: vi.fn(),
   discordWebhook: vi.fn(),
-  runDirectAgentZ: vi.fn(),
-  handleWorkflowAction: vi.fn(),
+  runAgentZ: vi.fn(),
 }));
 
 vi.mock("next/server", () => ({
@@ -31,16 +30,8 @@ vi.mock("@repo/chat-bot", () => ({
   }),
 }));
 
-vi.mock("@/lib/agent-z/direct", () => ({
-  runDirectAgentZ: mocks.runDirectAgentZ,
-}));
-
-vi.mock("@/lib/agent-z/workflow-actions", () => ({
-  parseWorkflowActionCustomId: (customId: string | undefined) => {
-    const match = customId?.match(/^agentz:(start|cancel):(.+)$/);
-    return match ? { action: match[1], token: match[2] } : null;
-  },
-  handleWorkflowAction: mocks.handleWorkflowAction,
+vi.mock("@/lib/agent-z/run", () => ({
+  runAgentZ: mocks.runAgentZ,
 }));
 
 import { POST } from "./route";
@@ -68,22 +59,11 @@ describe("Discord route", () => {
     process.env.DISCORD_BOT_TOKEN = "bot-token";
     process.env.DATABASE_URL = "postgres://test";
     process.env.AGENT_Z_INTERNAL_SECRET = "internal-secret";
-    mocks.runDirectAgentZ.mockResolvedValue({ kind: "answer", text: "Hello from Agent Z." });
-    mocks.handleWorkflowAction.mockResolvedValue({ text: "Started reminder workflow.", components: [] });
+    mocks.runAgentZ.mockResolvedValue({ text: "Hello from Agent Z." });
   });
 
   it("handles agent-z-admin as a native ephemeral interaction", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        Response.json({
-          started: true,
-          runId: "workflow-run",
-          agentRunId: "12345678-1234-1234-1234-123456789012",
-          tier: "mod",
-        })
-      )
-      .mockResolvedValueOnce(Response.json({ id: "original" }));
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({ id: "original" }));
     vi.stubGlobal("fetch", fetchMock);
 
     const response = await POST(
@@ -109,27 +89,22 @@ describe("Discord route", () => {
     });
 
     await Promise.all(mocks.afterTasks);
-    expect(fetchMock).toHaveBeenCalledWith(
-      new URL("https://agent.test/api/workflow/invoke"),
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({ Authorization: "Bearer internal-secret" }),
-      })
-    );
-    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
-      requiredTier: "mod",
-      replyTarget: {
-        _type: "discord:Interaction",
-        applicationId: "1495910562360594452",
-        interactionToken: "interaction-token",
+    expect(mocks.runAgentZ).toHaveBeenCalledWith({
+      prompt: "check recent messages",
+      invokerUserId: "100000000000000000",
+      discordContext: {
+        guildId: "1488609972676984894",
+        channelId: "1496580126601646150",
+        roleIds: ["1496580080917414040"],
+        isDirectMessage: false,
       },
     });
-    expect(fetchMock).toHaveBeenLastCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       "https://discord.com/api/v10/webhooks/1495910562360594452/interaction-token/messages/@original",
       expect.objectContaining({ method: "PATCH" })
     );
-    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body))).toMatchObject({
-      content: "I'm on it. I'll send the staff-only answer here when it's ready.",
+    expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toMatchObject({
+      content: "Hello from Agent Z.",
       flags: 64,
     });
     expect(mocks.discordWebhook).not.toHaveBeenCalled();
@@ -164,7 +139,7 @@ describe("Discord route", () => {
 
     await Promise.all(mocks.afterTasks);
 
-    expect(mocks.runDirectAgentZ).toHaveBeenCalledWith({
+    expect(mocks.runAgentZ).toHaveBeenCalledWith({
       prompt: "hello",
       invokerUserId: "100000000000000000",
       discordContext: {
@@ -172,10 +147,6 @@ describe("Discord route", () => {
         channelId: "1496580126601646150",
         roleIds: [],
         isDirectMessage: false,
-      },
-      replyTarget: {
-        _type: "discord:Channel",
-        channelId: "1496580126601646150",
       },
     });
     expect(fetchMock).toHaveBeenCalledWith(

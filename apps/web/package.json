@@ -14,14 +14,13 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@prisma/client": "^6.19.3",
     "@repo/agent": "^0.0.0",
-    "@repo/chat-bot": "*",
+    "@repo/chat-bot": "^0.0.0",
     "@repo/config": "^0.0.0",
     "@repo/db": "^0.0.0",
     "@repo/discord-tools": "^0.0.0",
     "@repo/knowledge": "^0.0.0",
     "@repo/ui": "*",
     "@upstash/redis": "^1.37.0",
-    "@workflow/ai": "^4.1.0",
     "ai": "^6.0.174",
     "chat": "^4.26.0",
     "discord-interactions": "^4.4.0",
@@ -33,7 +32,6 @@
     "next": "^16.2.4",
     "react": "19.1.4",
     "react-dom": "19.1.4",
-    "workflow": "^4.2.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
