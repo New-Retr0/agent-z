@@ -24,6 +24,13 @@ import { buildKnowledgeContext } from "@repo/knowledge";
 import { getRuntimeConfig } from "@repo/config/runtime-config";
 import { env } from "@repo/config/env";
 import type { AgentReplyTarget, AgentTier, DiscordInvocationContext } from "@repo/agent/types";
+import {
+  loadRecentTurns,
+  loadUserProfile,
+  recordConversationTurn,
+  type ProfileNote,
+  type UserProfileSnapshot,
+} from "@repo/db";
 import { resolveDiscordAccess } from "@/lib/discord-access";
 
 export type RunAgentZInput = {
@@ -70,23 +77,61 @@ function buildActorHeaders(
   return headers;
 }
 
-function buildSystemPrompt(tier: AgentTier, knowledge: string, override: string | null): string {
+function formatProfileForPrompt(profile: UserProfileSnapshot | null): string {
+  if (!profile) return "No prior profile on file for this user.";
+  const lastNotes = profile.notes.slice(-15);
+  const notesBlock = lastNotes.length
+    ? lastNotes
+        .map((n: ProfileNote) => `  - (${n.kind ?? "note"}) ${n.text}`)
+        .join("\n")
+    : "  (no notes yet)";
+  const prefsKeys = Object.keys(profile.preferences);
+  const prefsBlock = prefsKeys.length
+    ? prefsKeys.map((k) => `  - ${k}: ${JSON.stringify(profile.preferences[k])}`).join("\n")
+    : "  (no preferences recorded)";
+  const lastSeen = profile.lastSeenAt
+    ? profile.lastSeenAt.toISOString()
+    : "never recorded";
+  return `Display name: ${profile.displayName ?? "unknown"}
+Last seen: ${lastSeen}
+Notes:
+${notesBlock}
+Preferences:
+${prefsBlock}`;
+}
+
+function buildSystemPrompt(args: {
+  tier: AgentTier;
+  knowledge: string;
+  override: string | null;
+  invokerUserId: string;
+  invokerProfile: UserProfileSnapshot | null;
+  recentTurnsBlock: string;
+}): string {
   const base =
-    override?.trim() ||
+    args.override?.trim() ||
     "You are Agent Z, a helpful Discord moderation and community assistant for this server.";
   return `${base}
 
 Operating context:
-- Resolved tier: ${tier}
+- Resolved tier: ${args.tier}
+- Invoker user id: ${args.invokerUserId}
 - You can call Discord tools through the MCP connection. The MCP server has already filtered the tool set to what this caller is allowed to use; if a tool you would expect is missing, the caller does not have permission for it. Do not pretend you ran a tool you cannot see.
 - Always cite message IDs and timestamps when referring to specific Discord events.
 - Never invent server data. If a tool result is empty or ambiguous, say so.
 - Destructive admin tools (bulk_delete_messages, role removals) require an explicit human confirmation via MCP elicitation. If the client doesn't confirm, abort.
-- Never claim to have persistent memory across conversations in this Phase 2 build — that's coming in Phase 3.
+- You DO have persistent memory across conversations: the most recent turns and the invoker's profile are loaded into this prompt every time. When the user says "remember that…", you should call the remember_about_user MCP tool (verified+ tier) to persist it, not just acknowledge it.
+- If the user asks to be forgotten, instruct them to run /forget-me; do not try to wipe data through tool calls.
 - Replies are posted into Discord, so format them concisely. Use short paragraphs and inline code spans where useful. Avoid headers and giant code blocks unless the user explicitly asked for them.
 
+What you remember about the invoker:
+${formatProfileForPrompt(args.invokerProfile)}
+
+Recent turns in this channel (oldest first):
+${args.recentTurnsBlock}
+
 Bundled local knowledge that may be relevant:
-${knowledge}`;
+${args.knowledge}`;
 }
 
 async function getMcpClientOrNull(
@@ -142,9 +187,43 @@ export async function runAgentZ(input: RunAgentZInput): Promise<RunAgentZResult>
   }
 
   const rc = await getRuntimeConfig();
-  const knowledge = await buildKnowledgeContext(input.prompt, 5);
+  const [knowledge, recentTurns, invokerProfile] = await Promise.all([
+    buildKnowledgeContext(input.prompt, 5),
+    loadRecentTurns({ channelId: input.discordContext.channelId, limit: 12 }),
+    loadUserProfile(input.invokerUserId).catch((error) => {
+      console.error("[agent-z] Failed to load user profile:", error);
+      return null;
+    }),
+  ]);
+  const recentTurnsBlock = recentTurns.length
+    ? recentTurns
+        .map((t) => {
+          const author = t.role === "assistant" ? "agent-z" : t.userId;
+          const time = t.createdAt.toISOString();
+          return `[${time}] ${t.role}<${author}>: ${t.content}`;
+        })
+        .join("\n")
+    : "(no prior turns in this channel)";
   const model = createGateway({ apiKey: env.AI_GATEWAY_API_KEY })(rc.modelId);
-  const system = buildSystemPrompt(tier, knowledge, rc.systemPromptOverride);
+  const system = buildSystemPrompt({
+    tier,
+    knowledge,
+    override: rc.systemPromptOverride,
+    invokerUserId: input.invokerUserId,
+    invokerProfile,
+    recentTurnsBlock,
+  });
+
+  // Record the user turn up front so it shows up on the next call even if the agent fails.
+  recordConversationTurn({
+    channelId: input.discordContext.channelId,
+    userId: input.invokerUserId,
+    role: "user",
+    content: input.prompt,
+    modelId: rc.modelId,
+  }).catch((error) => {
+    console.error("[agent-z] Failed to record user turn:", error);
+  });
 
   const mcp = await getMcpClientOrNull(input.invokerUserId, input.discordContext);
   let tools: Awaited<ReturnType<NonNullable<typeof mcp>["tools"]>> | undefined;
@@ -177,6 +256,16 @@ export async function runAgentZ(input: RunAgentZInput): Promise<RunAgentZResult>
     });
 
     const text = result.text.trim() || "I could not produce a useful answer.";
+    // Best-effort: record the assistant turn so future invocations see it.
+    recordConversationTurn({
+      channelId: input.discordContext.channelId,
+      userId: input.invokerUserId,
+      role: "assistant",
+      content: text,
+      modelId: rc.modelId,
+    }).catch((error) => {
+      console.error("[agent-z] Failed to record assistant turn:", error);
+    });
     return { kind: "answer", text, toolCallCount, stepCount };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

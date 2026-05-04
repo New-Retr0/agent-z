@@ -121,3 +121,77 @@ model KnowledgeDoc {
 
   @@map("knowledge_doc")
 }
+
+/// Append-only conversation history per scope (channel / DM / thread).
+/// Both user-authored and assistant-authored turns are stored. Loaded by
+/// runAgentZ on every turn so the agent has cross-invocation continuity
+/// without paying the per-turn cost of querying the message archive.
+model ConversationTurn {
+  id          String   @id @default(cuid())
+  channelId   String   @map("channel_id")
+  userId      String   @map("user_id")
+  role        String
+  content     String   @db.Text
+  toolCalls   Json?    @map("tool_calls")
+  modelId     String?  @map("model_id")
+  agentRunId  String?  @map("agent_run_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([channelId, createdAt])
+  @@index([userId, createdAt])
+  @@map("conversation_turn")
+}
+
+/// Persistent per-user profile maintained by the agent via the
+/// `remember_about_user` tool. Cleared by `/forget-me` and the
+/// `forget_about_user` admin tool.
+model UserProfile {
+  userId          String   @id @map("user_id")
+  displayName     String?  @map("display_name")
+  notesJson       Json     @default("[]") @map("notes_json")
+  preferencesJson Json     @default("{}") @map("preferences_json")
+  lastSeenAt      DateTime? @map("last_seen_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("user_profile")
+}
+
+/// Replaces the workflow-based reminder path. Rows are inserted by the
+/// `schedule_message` MCP tool and drained by /api/cron/scheduled-msgs.
+model ScheduledMessage {
+  id            String   @id @default(cuid())
+  channelId     String   @map("channel_id")
+  guildId       String?  @map("guild_id")
+  scheduledFor  DateTime @map("scheduled_for")
+  content       String   @db.Text
+  components    Json?
+  authorUserId  String   @map("author_user_id")
+  targetUserIds String[] @default([]) @map("target_user_ids")
+  status        String   @default("pending")
+  sentAt        DateTime? @map("sent_at")
+  attempts      Int      @default(0)
+  lastError     String?  @map("last_error") @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([status, scheduledFor])
+  @@index([channelId])
+  @@map("scheduled_message")
+}
+
+/// Tracks reaction-role / verification grants so we can audit and revoke.
+model VerificationGrant {
+  id                 String    @id @default(cuid())
+  userId             String    @map("user_id")
+  guildId            String    @map("guild_id")
+  roleId             String    @map("role_id")
+  reactionMessageId  String?   @map("reaction_message_id")
+  reactionEmoji      String?   @map("reaction_emoji")
+  grantedAt          DateTime  @default(now()) @map("granted_at")
+  revokedAt          DateTime? @map("revoked_at")
+  revokedReason      String?   @map("revoked_reason")
+
+  @@unique([userId, guildId, roleId])
+  @@index([guildId])
+  @@map("verification_grant")
+}

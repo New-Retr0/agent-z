@@ -13,6 +13,7 @@
     "@chat-adapter/discord": "^4.26.0",
     "@chat-adapter/state-pg": "^4.26.0",
     "@repo/agent": "*",
+    "@repo/db": "*",
     "chat": "^4.26.0"
   },
   "devDependencies": {

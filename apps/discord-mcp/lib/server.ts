@@ -1,4 +1,5 @@
 import { createMcpHandler } from "mcp-handler";
+import { registerMemoryTools } from "./memory-tools";
 import { registerPrompts } from "./prompts";
 import { registerResources } from "./resources";
 import { registerTools } from "./tools";
@@ -17,6 +18,7 @@ import { registerTools } from "./tools";
 export const mcpHandler = createMcpHandler(
   (server) => {
     registerTools(server);
+    registerMemoryTools(server);
     registerResources(server);
     registerPrompts(server);
   },
