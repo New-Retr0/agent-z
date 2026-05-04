@@ -10,6 +10,14 @@ export type RuntimeConfig = {
   messageContentIntent: boolean;
   allowDeleteVerifiedRole: boolean;
   welcomeDmTemplate: string;
+  /** Snowflake of the role granted on verify. */
+  verifiedRoleId: string | null;
+  /** Channel hosting the verify reaction prompt (used for sanity-check). */
+  verifyChannelId: string | null;
+  /** Specific message id whose reactions trigger verification; null = any message in the channel. */
+  verifyMessageId: string | null;
+  /** Emoji that grants verification. Plain unicode (e.g. "✅") or `name:id` for custom. */
+  verifyEmoji: string;
 };
 
 const DEFAULTS: RuntimeConfig = {
@@ -19,6 +27,10 @@ const DEFAULTS: RuntimeConfig = {
   messageContentIntent: true,
   allowDeleteVerifiedRole: false,
   welcomeDmTemplate: "Welcome to the server! You now have the Verified role.",
+  verifiedRoleId: null,
+  verifyChannelId: null,
+  verifyMessageId: null,
+  verifyEmoji: "✅",
 };
 
 async function loadFromDbInternal(): Promise<RuntimeConfig> {
@@ -32,6 +44,10 @@ async function loadFromDbInternal(): Promise<RuntimeConfig> {
     "message_content_intent",
     "allow_delete_verified_role",
     "welcome_dm_template",
+    "verified_role_id",
+    "verify_channel_id",
+    "verify_message_id",
+    "verify_emoji",
   ] as const;
 
   let rows: { key: string; valueJson: string }[];
@@ -66,6 +82,10 @@ async function loadFromDbInternal(): Promise<RuntimeConfig> {
     messageContentIntent: getBool("message_content_intent") ?? DEFAULTS.messageContentIntent,
     allowDeleteVerifiedRole: getBool("allow_delete_verified_role") ?? DEFAULTS.allowDeleteVerifiedRole,
     welcomeDmTemplate: getStr("welcome_dm_template") ?? DEFAULTS.welcomeDmTemplate,
+    verifiedRoleId: getStr("verified_role_id") ?? DEFAULTS.verifiedRoleId,
+    verifyChannelId: getStr("verify_channel_id") ?? DEFAULTS.verifyChannelId,
+    verifyMessageId: getStr("verify_message_id") ?? DEFAULTS.verifyMessageId,
+    verifyEmoji: getStr("verify_emoji") ?? DEFAULTS.verifyEmoji,
   };
 }
 

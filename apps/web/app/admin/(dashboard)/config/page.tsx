@@ -1,8 +1,10 @@
 import { prisma } from "@repo/db";
+import { getRuntimeConfig } from "@repo/config/runtime-config";
 import {
   addChannelMapping,
   addRoleMapping,
   setFeatureFlag,
+  setVerifyConfig,
   upsertRateLimit,
 } from "./actions";
 
@@ -13,6 +15,7 @@ export default async function ConfigPage() {
   let channels: { id: string; kind: string; discordChannelId: string }[] = [];
   let rateLimits: { id: string; kind: string; value: number }[] = [];
   let flags: { key: string; value: string }[] = [];
+  const rc = await getRuntimeConfig();
   try {
     ;[roles, channels, rateLimits] = await Promise.all([
       prisma.roleMapping.findMany({ orderBy: { kind: "asc" } }),
@@ -102,6 +105,68 @@ export default async function ConfigPage() {
           <button type="submit" className="rounded bg-zinc-100 text-zinc-900 px-3 py-1 text-sm">
             Save
           </button>
+        </form>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-medium">Verify on reaction</h2>
+        <p className="text-xs text-zinc-500">
+          When a non-bot user adds the configured emoji on the configured message, Agent Z grants the verified
+          role and DMs <code className="font-mono">welcome_dm_template</code>. Leaving any of role/channel ID
+          blank disables the flow. Use <code className="font-mono">{"{user}"}</code> in the welcome template
+          to mention the new member.
+        </p>
+        <form action={setVerifyConfig} className="grid gap-3 max-w-xl text-sm md:grid-cols-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-zinc-400 text-xs">Verified role ID</span>
+            <input
+              name="verified_role_id"
+              defaultValue={rc.verifiedRoleId ?? ""}
+              placeholder="e.g. 1234567890123456789"
+              className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-zinc-400 text-xs">Verify channel ID</span>
+            <input
+              name="verify_channel_id"
+              defaultValue={rc.verifyChannelId ?? ""}
+              placeholder="e.g. 1234567890123456789"
+              className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-zinc-400 text-xs">Verify message ID (optional)</span>
+            <input
+              name="verify_message_id"
+              defaultValue={rc.verifyMessageId ?? ""}
+              placeholder="leave blank to accept any message in channel"
+              className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-zinc-400 text-xs">Emoji</span>
+            <input
+              name="verify_emoji"
+              defaultValue={rc.verifyEmoji}
+              placeholder="✅ or name:id"
+              className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 font-mono"
+            />
+          </label>
+          <label className="flex flex-col gap-1 md:col-span-2">
+            <span className="text-zinc-400 text-xs">Welcome DM template</span>
+            <textarea
+              name="welcome_dm_template"
+              defaultValue={rc.welcomeDmTemplate}
+              rows={3}
+              className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 leading-relaxed"
+            />
+          </label>
+          <div className="md:col-span-2">
+            <button type="submit" className="rounded bg-zinc-100 text-zinc-900 px-3 py-1 text-sm">
+              Save verify config
+            </button>
+          </div>
         </form>
       </section>
 

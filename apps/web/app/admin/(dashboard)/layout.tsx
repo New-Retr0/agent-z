@@ -7,6 +7,8 @@ const nav = [
   { href: "/admin/models", label: "Models" },
   { href: "/admin/config", label: "Config" },
   { href: "/admin/runs", label: "Runs" },
+  { href: "/admin/mcp", label: "MCP" },
+  { href: "/admin/oversight", label: "Oversight" },
   { href: "/admin/confirmations", label: "Confirmations" },
   { href: "/admin/audit", label: "Audit" },
   { href: "/admin/knowledge", label: "Knowledge" },

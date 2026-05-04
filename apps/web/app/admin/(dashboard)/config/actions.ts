@@ -93,3 +93,60 @@ export async function setFeatureFlag(formData: FormData) {
   invalidateRuntimeConfig();
   revalidatePath("/admin/config");
 }
+
+/**
+ * Persists the verify-on-reaction policy. All four columns are written
+ * together so partial updates can't leave the bot in a half-configured state
+ * (which would make verifyUserFromReaction reject every reaction).
+ */
+export async function setVerifyConfig(formData: FormData) {
+  await assertAdminServer();
+  const verifiedRoleId = String(formData.get("verified_role_id") ?? "").trim();
+  const verifyChannelId = String(formData.get("verify_channel_id") ?? "").trim();
+  const verifyMessageId = String(formData.get("verify_message_id") ?? "").trim();
+  const verifyEmoji = String(formData.get("verify_emoji") ?? "").trim() || "✅";
+  const welcomeDmTemplate = String(formData.get("welcome_dm_template") ?? "").trim();
+
+  // Allow blank role/channel ids so admins can clear the config to disable verify.
+  if (verifiedRoleId && !/^\d{17,20}$/.test(verifiedRoleId)) {
+    throw new Error("verified_role_id must be a snowflake or empty");
+  }
+  if (verifyChannelId && !/^\d{17,20}$/.test(verifyChannelId)) {
+    throw new Error("verify_channel_id must be a snowflake or empty");
+  }
+  if (verifyMessageId && !/^\d{17,20}$/.test(verifyMessageId)) {
+    throw new Error("verify_message_id must be a snowflake or empty");
+  }
+
+  const writes: Array<{ key: string; value: string }> = [
+    { key: "verified_role_id", value: JSON.stringify(verifiedRoleId || null) },
+    { key: "verify_channel_id", value: JSON.stringify(verifyChannelId || null) },
+    { key: "verify_message_id", value: JSON.stringify(verifyMessageId || null) },
+    { key: "verify_emoji", value: JSON.stringify(verifyEmoji) },
+  ];
+  if (welcomeDmTemplate) {
+    writes.push({ key: "welcome_dm_template", value: JSON.stringify(welcomeDmTemplate) });
+  }
+
+  for (const w of writes) {
+    await prisma.botConfig.upsert({
+      where: { key: w.key },
+      create: { id: randomUUID(), key: w.key, valueJson: w.value },
+      update: { valueJson: w.value },
+    });
+  }
+  await writeAuditEntry({
+    actor: ACTOR,
+    action: "bot_config.verify_set",
+    target: "verify",
+    afterJson: JSON.stringify({
+      verifiedRoleId,
+      verifyChannelId,
+      verifyMessageId,
+      verifyEmoji,
+      welcomeDmTemplateLength: welcomeDmTemplate.length,
+    }),
+  });
+  invalidateRuntimeConfig();
+  revalidatePath("/admin/config");
+}
