@@ -19,7 +19,7 @@ const BodySchema = z.object({
  * Internal verify endpoint called by the chat-bot reaction handler.
  *
  * Auth: Bearer token equal to AGENT_Z_INTERNAL_SECRET (same secret already used
- * by /api/agent/direct and /api/workflow/invoke). Body is the validated reaction
+ * by /api/agent/direct). Body is the validated reaction
  * fingerprint; verifyUserFromReaction handles config / dedupe / role grant /
  * welcome DM / VerificationGrant audit row.
  */

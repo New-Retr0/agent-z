@@ -20,6 +20,7 @@
     "@repo/discord-tools": "^0.0.0",
     "@repo/knowledge": "^0.0.0",
     "@repo/ui": "*",
+    "@t3-oss/env-nextjs": "^0.13.11",
     "@upstash/redis": "^1.37.0",
     "ai": "^6.0.174",
     "chat": "^4.26.0",

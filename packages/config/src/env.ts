@@ -15,7 +15,7 @@ export const env = createEnv({
     DIRECT_URL: z.string().url().optional(),
     /** Shared secret for /admin (httpOnly cookie). Replace with Clerk + Discord when ready. */
     AGENT_Z_ADMIN_SECRET: z.string().min(16).optional(),
-    /** Same value in `apps/web` and serverless bot — `Authorization: Bearer ...` for POST /api/workflow/invoke. */
+    /** Shared between `apps/web` and the chat-bot for `Authorization: Bearer ...` on `/api/agent/direct` and `/api/discord/verify`. */
     AGENT_Z_INTERNAL_SECRET: z.string().min(16).optional(),
     CLERK_SECRET_KEY: z.string().optional(),
     CLERK_WEBHOOK_SECRET: z.string().optional(),

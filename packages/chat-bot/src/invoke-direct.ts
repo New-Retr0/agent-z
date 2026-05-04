@@ -1,5 +1,5 @@
 import type { AgentReplyTarget, DiscordInvocationContext } from "@repo/agent/types";
-import { getBaseUrl } from "./invoke-workflow";
+import { getBaseUrl } from "./base-url";
 
 export async function invokeAgentDirect(input: {
   prompt: string;

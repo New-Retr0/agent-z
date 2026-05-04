@@ -34,7 +34,7 @@ The contest positioning is strongest when framed as a real community agent built
 | Agent run | `runAgentZ` | Uses AI SDK 6 `streamText` with MCP tools, returns text response. | Implemented with tier-gated MCP tool access via `experimental_createMCPClient`. |
 | Tier tools | `getToolsForTier` | Public/verified get safe tools; mod gets moderation note; admin gets config hint. | Implemented. Tool effects are currently stub-like, not real moderation. |
 | Access policy | `resolveDiscordAccess` | Denies DMs, enforces mapped channels when present, maps roles by priority, optionally allows public tier. | Covered by table-driven tests. Live policy now maps `Verified` to `verified` and `🏆-zta-hub` as the allowed agent channel. |
-| Rate limits | Prisma `RateLimit` | Constrain usage when configured. | Implemented for `user_rpm` and `global_rpm` in `/api/workflow/invoke`. |
+| Rate limits | Prisma `RateLimit` | Constrain usage when configured. | Implemented for `user_rpm` and `global_rpm` in `/api/agent/direct`. |
 | Confirmations | Prisma `Confirmation`, admin hooks | Should support human approval if product claims it. | Partially scaffolded; not wired into Agent Z workflow. |
 | Admin AI smoke test | `POST /api/admin/test-prompt` | Requires admin and AI Gateway key, runs a concise prompt using configured model. | Implemented. Needs authenticated browser/admin verification. |
 | Vercel deployment | Vercel production app | Hosts Next.js routes plus Workflow endpoints under `.well-known/workflow`. | Implemented and ready. |
@@ -48,7 +48,7 @@ Live Discord tests may use the `NewRetr0` user only for safe command, role/chann
 - Added `vitest` and `npm test` so the audit can be repeated.
 - Added 26 tests covering request parsing, secret comparison, Discord access policy, workflow invocation, Chat SDK handlers, Discord reply chunking, and admin hook resume behavior.
 - Expanded to 32 tests covering rate-limit enforcement and the new knowledge-search tool.
-- Enforced `user_rpm` and `global_rpm` rate limits in `/api/workflow/invoke`.
+- Enforced `user_rpm` and `global_rpm` rate limits in `/api/agent/direct`.
 - Added a read-only `search_knowledge` tool available to every tier.
 - Added an optional `apps/gateway` process plus `npm run gateway` so Agent Z can appear online during demos.
 - Added `.vercelignore` so CLI deployments do not upload local artifacts.

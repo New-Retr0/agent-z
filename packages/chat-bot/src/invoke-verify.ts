@@ -1,4 +1,4 @@
-import { getBaseUrl } from "./invoke-workflow";
+import { getBaseUrl } from "./base-url";
 
 export interface VerifyRequest {
   guildId: string;
