@@ -26,6 +26,24 @@ function tokenFromToolOutput(output: unknown): string | null {
     const m = trimmed.match(/\b(pa_[a-f0-9]+)\b/);
     return m?.[1] ?? null;
   }
+  // MCP / AI SDK often wraps execute results as { content: [{ type: 'text', text: '...' }] }
+  if (output !== null && output !== undefined && typeof output === "object" && !Array.isArray(output)) {
+    const o = output as Record<string, unknown>;
+    if (typeof o.text === "string") {
+      const nested = tokenFromToolOutput(o.text);
+      if (nested) return nested;
+    }
+    if (Array.isArray(o.content)) {
+      for (const part of o.content) {
+        if (!part || typeof part !== "object") continue;
+        const p = part as Record<string, unknown>;
+        if (p.type === "text" && typeof p.text === "string") {
+          const nested = tokenFromToolOutput(p.text);
+          if (nested) return nested;
+        }
+      }
+    }
+  }
   const s =
     output !== undefined && output !== null
       ? typeof output === "object"
@@ -72,14 +90,56 @@ export function extractPaTokenDeep(root: unknown, depth = 0): string | null {
   return null;
 }
 
+function extractFromToolResultArray(arr: unknown): string | null {
+  if (!Array.isArray(arr)) return null;
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const row = arr[i] as Record<string, unknown> | undefined;
+    if (!row || typeof row !== "object") continue;
+    if (row.type === "tool-result" && "output" in row) {
+      const t = tokenFromToolOutput(row.output);
+      if (t) return t;
+    }
+    const t = extractPaTokenDeep(arr[i]);
+    if (t) return t;
+  }
+  return null;
+}
+
 /** Prefer later steps when multiple tools ran (e.g. retries). */
 export function extractPaTokenFromGenerateTextResult(result: {
   steps?: readonly unknown[];
   response?: { messages?: readonly unknown[] };
+  content?: readonly unknown[];
+  toolResults?: readonly unknown[];
+  staticToolResults?: readonly unknown[];
+  dynamicToolResults?: readonly unknown[];
 }): string | null {
+  const topBuckets = [result.dynamicToolResults, result.toolResults, result.staticToolResults];
+  for (const bucket of topBuckets) {
+    const t = extractFromToolResultArray(bucket);
+    if (t) return t;
+  }
+  if (Array.isArray(result.content)) {
+    const t = extractPaTokenDeep(result.content);
+    if (t) return t;
+  }
   const steps = result.steps;
   if (Array.isArray(steps)) {
     for (let i = steps.length - 1; i >= 0; i--) {
+      const step = steps[i] as Record<string, unknown>;
+      const inner = [
+        step.dynamicToolResults,
+        step.toolResults,
+        step.staticToolResults,
+      ];
+      for (const bucket of inner) {
+        const t = extractFromToolResultArray(bucket);
+        if (t) return t;
+      }
+      if (Array.isArray(step.content)) {
+        const t = extractPaTokenDeep(step.content);
+        if (t) return t;
+      }
       const t = extractPaTokenDeep(steps[i]);
       if (t) return t;
     }
@@ -111,7 +171,9 @@ export function impliesStagingWasClaimedWithoutToken(text: string): boolean {
   const joined = text.toLowerCase();
   const fakeToolBlock = /^```[\s\S]*\bdiscord_/im.test(text);
   const claimedStaged =
-    /\b(now staged|is now staged|has been staged|queued until|pending confirmation)\b/i.test(joined);
+    /\b(now staged|is now staged|has been staged|queued until|pending confirmation|queued for confirmation)\b/i.test(
+      joined
+    );
   const promisedUi =
     /buttons will appear/i.test(text) ||
     /confirm or cancel buttons/i.test(joined) ||
