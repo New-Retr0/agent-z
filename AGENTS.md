@@ -42,7 +42,8 @@ npm run dev
 - **Web** — [http://localhost:3000](http://localhost:3000)
 - **Admin** — [http://localhost:3000/admin/login](http://localhost:3000/admin/login) after `AGENT_Z_ADMIN_SECRET` is set
 - **Discord** — for local testing, use a tunnel (e.g. `cloudflared tunnel --url http://localhost:3000`) and set the **Interactions Endpoint URL** to `https://<public>/api/discord` in the Discord developer portal (and/or related webhook settings per Chat SDK / gateway docs).
-  - Slash commands work over HTTP Interactions. Regular message mentions and reply threads require **Gateway forwarding**; run `npm run gateway` with `AGENT_Z_APP_BASE_URL` pointing at the public Vercel/tunnel origin.
+  - Slash commands work over HTTP Interactions. Regular message mentions and reply threads require **Gateway forwarding**; run `npm run gateway` with `AGENT_Z_APP_BASE_URL` pointing at the public Vercel/tunnel origin (same origin as production **apps/web** — set this on Vercel for the web project too).
+  - Gateway worker env: `DISCORD_BOT_TOKEN`, `AGENT_Z_APP_BASE_URL`, `AGENT_Z_MESSAGE_CONTENT_INTENT=1` (and matching **Message Content Intent** in the Developer Portal). Optional: `DISCORD_MENTION_ROLE_IDS` (comma-separated role snowflakes) so `@Role` pings trigger without `@Bot`.
   - In the Discord developer portal, enable Bot **Message Content Intent** and grant read message history, send messages, create/send in threads, and reaction permissions.
 
 ## Build / CI

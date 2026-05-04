@@ -29,6 +29,19 @@ const oversightIncludeBots = ["1", "true", "yes", "on"].includes(
 );
 const maxForwardAttempts = 3;
 
+/** Optional comma-separated Discord role snowflakes: role @mentions trigger Agent Z without @bot user mention. */
+function parseMentionRoleAllowlist(raw: string | undefined): Set<string> {
+  const ids = new Set<string>();
+  if (!raw?.trim()) return ids;
+  for (const part of raw.split(",")) {
+    const id = part.trim();
+    if (/^\d{17,20}$/.test(id)) ids.add(id);
+  }
+  return ids;
+}
+
+const mentionRoleAllowlist = parseMentionRoleAllowlist(process.env.DISCORD_MENTION_ROLE_IDS);
+
 type RawGatewayPacket = {
   t?: string | null;
   d?: unknown;
@@ -55,6 +68,7 @@ type DiscordMessagePayload = {
     } | null;
   } | null;
   is_mention?: boolean;
+  mention_roles?: string[];
 };
 
 type DiscordReactionPayload = {
@@ -143,6 +157,11 @@ client.once(Events.ClientReady, (readyClient) => {
   readyClient.user.setActivity(activity, { type: ActivityType.Custom });
   console.log(`[Agent Z Gateway] online as ${readyClient.user.tag}`);
   console.log(`[Agent Z Gateway] forwarding Discord Gateway events to ${appBaseUrl}/api/discord`);
+  if (mentionRoleAllowlist.size > 0) {
+    console.log(
+      `[Agent Z Gateway] DISCORD_MENTION_ROLE_IDS active (${mentionRoleAllowlist.size} role(s)) — role @mentions trigger without bot user ping`
+    );
+  }
   if (oversightEnabled) {
     console.log(
       `[Agent Z Gateway] Oversight ingestion ENABLED — also forwarding MESSAGE_CREATE/UPDATE/DELETE to ${appBaseUrl}/api/discord/oversight (include bots: ${oversightIncludeBots})`
@@ -234,7 +253,12 @@ function normalizeGatewayData(eventType: string, data: unknown) {
       message.content?.includes(`<@!${botUserId}>`)
   );
 
-  if (!isReplyToAgentZ && !mentionsAgentZ) {
+  const mentionsConfiguredRole =
+    mentionRoleAllowlist.size > 0 &&
+    Array.isArray(message.mention_roles) &&
+    message.mention_roles.some((roleId) => mentionRoleAllowlist.has(roleId));
+
+  if (!isReplyToAgentZ && !mentionsAgentZ && !mentionsConfiguredRole) {
     return data;
   }
 

@@ -68,7 +68,7 @@ describe("Discord route", () => {
     process.env.DISCORD_APPLICATION_ID = "1495910562360594452";
     process.env.DISCORD_BOT_TOKEN = "bot-token";
     process.env.DATABASE_URL = "postgres://test";
-    process.env.AGENT_Z_INTERNAL_SECRET = "internal-secret";
+    process.env.AGENT_Z_INTERNAL_SECRET = "internal-secret-16chr";
     mocks.runAgentZ.mockResolvedValue({ text: "Hello from Agent Z." });
     mocks.applyAgentRateLimit.mockResolvedValue({ allowed: true });
     mocks.resolveDiscordAccess.mockResolvedValue({ allowed: true, tier: "mod" });
