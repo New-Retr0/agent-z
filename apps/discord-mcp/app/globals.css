@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, SFMono-Regular, monospace;
+
+  --color-background: oklch(0.16 0.005 240);
+  --color-foreground: oklch(0.96 0.005 240);
+  --color-muted: oklch(0.22 0.008 240);
+  --color-muted-foreground: oklch(0.7 0.01 240);
+  --color-border: oklch(0.28 0.01 240);
+  --color-accent: oklch(0.7 0.18 145);
+  --color-accent-foreground: oklch(0.16 0.005 240);
+}
+
+html,
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
