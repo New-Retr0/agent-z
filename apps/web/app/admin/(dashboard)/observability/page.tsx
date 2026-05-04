@@ -21,7 +21,7 @@ export default async function ObservabilityPage() {
         <p className="text-xs text-zinc-500 font-mono">fetchedAt: {snap.fetchedAt}</p>
       </header>
 
-      <section className="grid gap-3 grid-cols-2 md:grid-cols-4">
+      <section className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         <Stat label="Runtime model" value={snap.modelId} />
         <Stat
           label="MCP tools (discord_)"
@@ -29,8 +29,12 @@ export default async function ObservabilityPage() {
           tone={snap.mcpAvailable && snap.mcpDiscordTools === 0 ? "warn" : "ok"}
         />
         <Stat
-          label="AI Gateway catalog"
-          value={snap.gatewayCatalogCount != null ? String(snap.gatewayCatalogCount) : "n/a"}
+          label="Staged lifecycle"
+          value={
+            snap.pendingActionCounts
+              ? `pending ${snap.pendingActionCounts.pending ?? 0} · done ${snap.pendingActionCounts.executed ?? 0} · cancelled ${snap.pendingActionCounts.cancelled ?? 0}`
+              : "n/a"
+          }
         />
         <Stat
           label="Oversight pending embed"

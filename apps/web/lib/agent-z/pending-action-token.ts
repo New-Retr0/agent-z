@@ -171,13 +171,14 @@ export function impliesStagingWasClaimedWithoutToken(text: string): boolean {
   const joined = text.toLowerCase();
   const fakeToolBlock = /^```[\s\S]*\bdiscord_/im.test(text);
   const claimedStaged =
-    /\b(now staged|is now staged|has been staged|queued until|pending confirmation|queued for confirmation)\b/i.test(
+    /\b(now staged|is now staged|has been staged|queued until|pending confirmation|queued for confirmation|staging .* (deletion|action|removal))\b/i.test(
       joined
     );
   const promisedUi =
     /buttons will appear/i.test(text) ||
     /confirm or cancel buttons/i.test(joined) ||
-    /confirm the action in the discord ui/i.test(joined);
+    /confirm the action in the discord ui/i.test(joined) ||
+    /requires final confirmation through discord/i.test(joined);
   return fakeToolBlock || claimedStaged || promisedUi;
 }
 

@@ -22,9 +22,6 @@ export async function resolveDiscordAccess(
   const runtimeConfig = await getRuntimeConfig();
   const channelId = normalizeDiscordSnowflake(context.channelId);
   const roleIds = new Set(context.roleIds.map(normalizeDiscordSnowflake).filter(Boolean));
-  const ownerId = process.env.AGENT_Z_OWNER_DISCORD_ID?.trim();
-  const uid = normalizeDiscordSnowflake(context.invokerUserId);
-
   let roleMappings: Array<{ kind: string; discordRoleId: string }> = [];
   let channelMappings: Array<{ kind: string; discordChannelId: string }> = [];
   try {
@@ -43,10 +40,6 @@ export async function resolveDiscordAccess(
 
   if (allowedChannelIds.length > 0 && (!channelId || !allowedChannelIds.includes(channelId))) {
     return { allowed: false, reason: "Agent Z is not enabled in this channel." };
-  }
-
-  if (ownerId && uid && ownerId === uid) {
-    return { allowed: true, tier: "admin" };
   }
 
   for (const tier of ROLE_PRIORITY) {

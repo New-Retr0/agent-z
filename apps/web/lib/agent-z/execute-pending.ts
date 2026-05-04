@@ -1,3 +1,4 @@
+import { getRuntimeConfig } from "@repo/config/runtime-config";
 import {
   discordRequest,
   loadDiscordToolConfig,
@@ -63,7 +64,11 @@ export async function executePendingDiscordAction(pending: {
   invokerUserId: string;
   guildId: string | null;
 }): Promise<string> {
-  const config = loadDiscordToolConfig();
+  const rcMerge = await getRuntimeConfig();
+  const config = loadDiscordToolConfig(process.env, {
+    reactionVerifiedRoleIdFromDb: rcMerge.verifiedRoleId,
+    allowDeleteVerifiedRoleFromDb: rcMerge.allowDeleteVerifiedRole,
+  });
   const raw = parseInput(pending.inputJson);
   const cap = pending.capability;
   const cx = ctxFor(pending);

@@ -84,7 +84,10 @@ export async function verifyUserFromReaction(args: VerifyArgs): Promise<VerifyOu
 
   let config: DiscordToolConfig;
   try {
-    config = await loadDiscordToolConfig();
+    config = loadDiscordToolConfig(process.env, {
+      reactionVerifiedRoleIdFromDb: rc.verifiedRoleId,
+      allowDeleteVerifiedRoleFromDb: rc.allowDeleteVerifiedRole,
+    });
   } catch (e) {
     return {
       kind: "error",

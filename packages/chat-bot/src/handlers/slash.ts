@@ -1,4 +1,5 @@
 import type { Chat } from "chat";
+import { PUBLIC_AGENT_Z_HELP_MARKDOWN } from "@repo/agent/public-help-markdown";
 import { forgetUser } from "@repo/db";
 import { getSlashDiscordContext, getSlashReplyTarget } from "../discord-context";
 import { invokeAgentDirect } from "../invoke-direct";
@@ -8,8 +9,7 @@ export function onSlash(bot: Chat) {
     const args = event.text?.trim() || "help";
     if (args === "help") {
       await event.channel.post({
-        markdown:
-          "Use `/agent-z text:<question>` for normal help. Staff can use `/agent-z-admin action:<request>` for private mod/admin runs.",
+        markdown: PUBLIC_AGENT_Z_HELP_MARKDOWN,
       });
       return;
     }

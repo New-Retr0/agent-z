@@ -1,5 +1,6 @@
 export { buildDiscordRestCheatsheet } from "./cheatsheet.js";
 export { loadDiscordToolConfig } from "./config.js";
+export type { LoadDiscordToolConfigOptions } from "./config.js";
 export type { DiscordToolConfig } from "./config.js";
 export { discordRequest, formatDiscordResponse } from "./discordRest.js";
 export type { DiscordRequestResult, HttpMethod, QueryRecord, QueryValue } from "./discordRest.js";

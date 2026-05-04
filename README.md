@@ -7,9 +7,10 @@ Vercel-hosted Agent Z: Discord interactions via the **Chat SDK** webhooks, **Neo
 1. `npm install`
 2. Copy each template: [`apps/web/env/.env.example`](apps/web/env/.env.example) → `apps/web/.env`, [`apps/discord-mcp/env/.env.example`](apps/discord-mcp/env/.env.example) → `apps/discord-mcp/.env` (if you run MCP locally), [`apps/gateway/env/.env.example`](apps/gateway/env/.env.example) → `apps/gateway/.env` (if you use `npm run gateway`).
 3. `cd packages/db && npx prisma migrate deploy`
-4. `npm run dev` — [http://localhost:3000](http://localhost:3000)
+4. _(Recommended)_ Seed Discord verify/runtime toggles — `npm run seed:config -w @repo/db` (needs `DATABASE_URL`; see `packages/db/scripts/seed-runtime-config.ts`).
+5. `npm run dev` — [http://localhost:3000](http://localhost:3000)
 
-See **[AGENTS.md](./AGENTS.md)** for runbook detail (tunnels, production, MCP).
+See **[AGENTS.md](./AGENTS.md)** for runbook detail (tunnels, production, MCP). Operator curl checks: **[docs/smoke-tests.md](./docs/smoke-tests.md)**.
 
 ## How Agent Z uses Vercel
 

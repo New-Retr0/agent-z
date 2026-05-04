@@ -47,7 +47,7 @@ export async function stagePendingActionFromMcp(args: {
 
   if (!res.ok) {
     const t = await res.text();
-    return { error: `Failed to stage action (${res.status}): ${t.slice(0, 500)}` };
+    return { error: `STAGING_FAILED status=${res.status} body=${t.slice(0, 200)}` };
   }
 
   return { token };

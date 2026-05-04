@@ -103,21 +103,31 @@ export async function editOriginalInteraction(
   applicationId: string | undefined,
   interactionToken: string | undefined,
   content: string,
-  options?: { flags?: number; components?: DiscordComponent[]; allowedMentions?: DiscordAllowedMentions }
+  options?: {
+    flags?: number;
+    components?: DiscordComponent[];
+    allowedMentions?: DiscordAllowedMentions;
+    /** When set, Discord embeds are sent (content may be empty if embeds carry the message). */
+    embeds?: unknown[];
+  }
 ) {
   if (!applicationId || !interactionToken) {
     return;
   }
   const safe = content.slice(0, 2000);
+  const body: Record<string, unknown> = {
+    content: safe,
+    flags: options?.flags ?? 0,
+    components: options?.components ?? [],
+    allowed_mentions: options?.allowedMentions ?? { parse: [] },
+  };
+  if (options?.embeds && options.embeds.length > 0) {
+    body.embeds = options.embeds;
+  }
   const response = await fetch(`https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}/messages/@original`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      content: safe,
-      flags: options?.flags ?? 0,
-      components: options?.components ?? [],
-      allowed_mentions: options?.allowedMentions ?? { parse: [] },
-    }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
     console.error(`Discord edit original failed: ${response.status} ${await response.text()}`);
@@ -129,20 +139,32 @@ export async function postDiscordInteractionFollowup(
   applicationId: string | undefined,
   interactionToken: string | undefined,
   content: string,
-  options?: { flags?: number; allowedMentions?: DiscordAllowedMentions }
+  options?: {
+    flags?: number;
+    allowedMentions?: DiscordAllowedMentions;
+    embeds?: unknown[];
+    components?: DiscordComponent[];
+  }
 ) {
   if (!applicationId || !interactionToken) {
     return;
   }
   const safe = content.slice(0, 2000);
+  const payload: Record<string, unknown> = {
+    content: safe,
+    flags: options?.flags ?? 0,
+    allowed_mentions: options?.allowedMentions ?? { parse: [] },
+  };
+  if (options?.embeds && options.embeds.length > 0) {
+    payload.embeds = options.embeds;
+  }
+  if (options?.components && options.components.length > 0) {
+    payload.components = options.components;
+  }
   const response = await fetch(`https://discord.com/api/v10/webhooks/${applicationId}/${interactionToken}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      content: safe,
-      flags: options?.flags ?? 0,
-      allowed_mentions: options?.allowedMentions ?? { parse: [] },
-    }),
+    body: JSON.stringify(payload),
   });
   if (!response.ok) {
     console.error(`Discord interaction followup failed: ${response.status} ${await response.text()}`);

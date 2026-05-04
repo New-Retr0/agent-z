@@ -1,12 +1,23 @@
 import { after, NextResponse } from "next/server";
 import { verifyKey } from "discord-interactions";
 
+import {
+  STAGED_CANCEL_PREFIX,
+  STAGED_CONFIRM_PREFIX,
+  STAGED_DETAILS_PREFIX,
+  STAGED_EDIT_PREFIX,
+  STAGED_EDIT_SUBMIT_PREFIX,
+  STAGED_PREVIEW_PREFIX,
+  buildEditStagedReasonModal,
+} from "@/lib/discord-staged-ui";
+
 export const runtime = "nodejs";
 
 const INTERACTION_TYPE = {
   Ping: 1,
   ApplicationCommand: 2,
   MessageComponent: 3,
+  ModalSubmit: 5,
 } as const;
 
 const RESPONSE_TYPE = {
@@ -14,6 +25,7 @@ const RESPONSE_TYPE = {
   ChannelMessageWithSource: 4,
   DeferredChannelMessageWithSource: 5,
   DeferredUpdateMessage: 6,
+  Modal: 9,
 } as const;
 
 const EPHEMERAL_FLAG = 64;
@@ -50,19 +62,75 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Discord webhook is not configured", missing }, { status: 503 });
     }
 
+    if (interaction?.type === INTERACTION_TYPE.ModalSubmit) {
+      const signatureValid = await verifyDiscordSignature(request, bodyBytes);
+      if (!signatureValid) {
+        return new Response("Invalid signature", { status: 401 });
+      }
+      const modal = parseModalSubmitInteraction(interaction);
+      if (modal?.kind === "edit_reason") {
+        after(async () => {
+          const { handleStagedSummaryModalSubmit } = await import("./interaction-handlers");
+          await handleStagedSummaryModalSubmit(interaction);
+        });
+        return NextResponse.json({
+          type: RESPONSE_TYPE.DeferredChannelMessageWithSource,
+          data: { flags: EPHEMERAL_FLAG },
+        });
+      }
+    }
+
     if (interaction?.type === INTERACTION_TYPE.MessageComponent) {
       const signatureValid = await verifyDiscordSignature(request, bodyBytes);
       if (!signatureValid) {
         return new Response("Invalid signature", { status: 401 });
       }
-      const cid = extractMessageComponentCustomId(interaction);
-      if (cid && (cid.kind === "confirm" || cid.kind === "cancel")) {
+      const cid = parseAgentZComponentInteraction(interaction);
+      if (cid?.kind === "open_modal_edit_reason") {
+        return NextResponse.json({
+          type: RESPONSE_TYPE.Modal,
+          data: buildEditStagedReasonModal(cid.token),
+        });
+      }
+      if (cid?.kind === "staged_confirm" || cid?.kind === "staged_cancel") {
         after(async () => {
           const { handlePendingActionComponent } = await import("./interaction-handlers");
-          await handlePendingActionComponent(interaction, cid.kind, cid.token);
+          await handlePendingActionComponent(
+            interaction,
+            cid.kind === "staged_confirm" ? "confirm" : "cancel",
+            cid.token
+          );
         });
         return NextResponse.json({
           type: RESPONSE_TYPE.DeferredUpdateMessage,
+        });
+      }
+      if (cid?.kind === "staged_details") {
+        after(async () => {
+          const { handlePendingActionDetailButton } = await import("./interaction-handlers");
+          await handlePendingActionDetailButton(interaction, cid.token);
+        });
+        return NextResponse.json({
+          type: RESPONSE_TYPE.DeferredUpdateMessage,
+        });
+      }
+      if (cid?.kind === "staged_preview") {
+        after(async () => {
+          const { handlePendingActionPreviewButton } = await import("./interaction-handlers");
+          await handlePendingActionPreviewButton(interaction, cid.token);
+        });
+        return NextResponse.json({
+          type: RESPONSE_TYPE.DeferredUpdateMessage,
+        });
+      }
+      if (cid?.kind === "help_shortcut") {
+        after(async () => {
+          const { handleAgentZHelpComponent } = await import("./interaction-handlers");
+          await handleAgentZHelpComponent(interaction, cid.variant);
+        });
+        return NextResponse.json({
+          type: RESPONSE_TYPE.DeferredChannelMessageWithSource,
+          data: { flags: EPHEMERAL_FLAG },
         });
       }
 
@@ -158,9 +226,26 @@ function isAgentZSlashInteraction(interaction: Record<string, unknown> | null): 
   return Boolean(data && typeof data === "object" && !Array.isArray(data) && (data as Record<string, unknown>).name === "agent-z");
 }
 
-function extractMessageComponentCustomId(
+type ParsedAzComponentInteraction =
+  | { kind: "open_modal_edit_reason"; token: string }
+  | { kind: "staged_confirm"; token: string }
+  | { kind: "staged_cancel"; token: string }
+  | { kind: "staged_details"; token: string }
+  | { kind: "staged_preview"; token: string }
+  | { kind: "help_shortcut"; variant: "why" | "forget" };
+
+function messageComponentRawCustomId(interaction: Record<string, unknown>): string {
+  const data = interaction["data"];
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return "";
+  }
+  const raw = (data as Record<string, unknown>)["custom_id"];
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+function parseModalSubmitInteraction(
   interaction: Record<string, unknown>
-): { kind: "confirm" | "cancel"; token: string } | null {
+): { kind: "edit_reason"; token: string } | null {
   const data = interaction["data"];
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return null;
@@ -169,11 +254,36 @@ function extractMessageComponentCustomId(
     typeof (data as Record<string, unknown>)["custom_id"] === "string"
       ? String((data as Record<string, unknown>)["custom_id"]).trim()
       : "";
-  if (raw.startsWith("azconfirm:")) {
-    return { kind: "confirm", token: raw.slice("azconfirm:".length) };
-  }
-  if (raw.startsWith("azcancel:")) {
-    return { kind: "cancel", token: raw.slice("azcancel:".length) };
+  if (raw.startsWith(STAGED_EDIT_SUBMIT_PREFIX)) {
+    return { kind: "edit_reason", token: raw.slice(STAGED_EDIT_SUBMIT_PREFIX.length) };
   }
   return null;
 }
+
+function parseAgentZComponentInteraction(interaction: Record<string, unknown>): ParsedAzComponentInteraction | null {
+  const raw = messageComponentRawCustomId(interaction);
+  if (!raw) return null;
+  if (raw.startsWith(STAGED_EDIT_PREFIX)) {
+    return { kind: "open_modal_edit_reason", token: raw.slice(STAGED_EDIT_PREFIX.length) };
+  }
+  if (raw.startsWith(STAGED_CONFIRM_PREFIX)) {
+    return { kind: "staged_confirm", token: raw.slice(STAGED_CONFIRM_PREFIX.length) };
+  }
+  if (raw.startsWith(STAGED_CANCEL_PREFIX)) {
+    return { kind: "staged_cancel", token: raw.slice(STAGED_CANCEL_PREFIX.length) };
+  }
+  if (raw.startsWith(STAGED_DETAILS_PREFIX)) {
+    return { kind: "staged_details", token: raw.slice(STAGED_DETAILS_PREFIX.length) };
+  }
+  if (raw.startsWith(STAGED_PREVIEW_PREFIX)) {
+    return { kind: "staged_preview", token: raw.slice(STAGED_PREVIEW_PREFIX.length) };
+  }
+  if (raw === "azhelp:why") {
+    return { kind: "help_shortcut", variant: "why" };
+  }
+  if (raw === "azhelp:forget") {
+    return { kind: "help_shortcut", variant: "forget" };
+  }
+  return null;
+}
+

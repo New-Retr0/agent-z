@@ -97,3 +97,25 @@ export async function updatePendingActionInteraction(payload: {
     },
   });
 }
+
+export async function updatePendingActionSummary(payload: {
+  token: string;
+  summary: string;
+}) {
+  const summary = payload.summary.trim().slice(0, 500);
+  return prisma.pendingAction.updateMany({
+    where: { token: payload.token, status: "pending" },
+    data: { summary },
+  });
+}
+
+/** Count staged-action rows grouped by outcome (for observability). */
+export async function countPendingActionsByStatus(): Promise<
+  Partial<Record<PendingActionStatus, number>>
+> {
+  const rows = await prisma.pendingAction.groupBy({
+    by: ["status"],
+    _count: { status: true },
+  });
+  return Object.fromEntries(rows.map((r) => [r.status, r._count.status]));
+}

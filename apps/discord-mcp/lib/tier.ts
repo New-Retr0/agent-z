@@ -18,7 +18,7 @@ const ROLE_MAPPING_KINDS: Tier[] = ["admin", "mod", "verified"];
  * Operators that change role mappings via the admin UI tolerate a one-minute delay before the new
  * mapping takes effect across MCP traffic; in exchange we avoid a Prisma round-trip on every tool call.
  */
-const getRoleMatrix = unstable_cache(
+const getRoleMatrixCached = unstable_cache(
   async () => {
     const rows = await prisma.roleMapping.findMany({
       where: { kind: { in: ROLE_MAPPING_KINDS } },
@@ -41,26 +41,24 @@ const getRoleMatrix = unstable_cache(
   { revalidate: 60, tags: ["role-mapping"] }
 );
 
+/** Cached role matrix for tier guards (staged moderation, etc.). */
+export async function getCachedRoleTierMatrix(): Promise<Record<Tier, Set<string>>> {
+  return getRoleMatrixCached();
+}
+
 /**
- * Resolve the tier of an MCP caller from their Discord role IDs.
- *
- * The owner override (`AGENT_Z_OWNER_DISCORD_ID`) gets `admin` regardless of role mapping so a fresh
- * deploy can never lock the operator out of the MCP.
+ * Resolve the tier of an MCP caller from their Discord role IDs (`RoleMapping` in Postgres).
  */
 export async function resolveTier(actor: Actor): Promise<Tier> {
   let tier: Tier = "public";
 
-  if (actor.userId && process.env.AGENT_Z_OWNER_DISCORD_ID === actor.userId) {
-    tier = "admin";
-  } else {
-    const matrix = await getRoleMatrix();
-    const roles = new Set(actor.roleIds);
-    tier = "public";
-    for (const t of ["admin", "mod", "verified"] as const) {
-      if ([...matrix[t]].some((roleId) => roles.has(roleId))) {
-        tier = t;
-        break;
-      }
+  const matrix = await getRoleMatrixCached();
+  const roles = new Set(actor.roleIds);
+  tier = "public";
+  for (const t of ["admin", "mod", "verified"] as const) {
+    if ([...matrix[t]].some((roleId) => roles.has(roleId))) {
+      tier = t;
+      break;
     }
   }
 

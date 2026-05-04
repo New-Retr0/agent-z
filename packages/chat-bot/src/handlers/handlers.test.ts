@@ -61,7 +61,7 @@ describe("chat-bot handlers", () => {
     await handlers.get("agent-z")?.(event);
 
     expect(event.channel.post).toHaveBeenCalledWith(
-      expect.objectContaining({ markdown: expect.stringContaining("Use `/agent-z text:<question>`") })
+      expect.objectContaining({ markdown: expect.stringContaining("/agent-z text:<question>") })
     );
   });
 

@@ -2,7 +2,7 @@ import { createGateway } from "ai";
 import { unstable_cache } from "next/cache";
 import { env } from "@repo/config/env";
 import { getRuntimeConfig } from "@repo/config/runtime-config";
-import { getOversightStats, listPendingActionsForAdmin } from "@repo/db";
+import { countPendingActionsByStatus, getOversightStats, listPendingActionsForAdmin } from "@repo/db";
 import { introspectMcp } from "@/lib/mcp-introspect";
 
 export type ObservabilitySnapshot = {
@@ -11,6 +11,9 @@ export type ObservabilitySnapshot = {
   mcpDiscordTools: number;
   mcpAvailable: boolean;
   mcpError?: string;
+  pendingActionCounts?: Partial<
+    Record<"pending" | "executed" | "cancelled" | "expired" | "failed", number>
+  >;
   oversight: {
     total: number;
     embedded: number;
@@ -25,10 +28,11 @@ export type ObservabilitySnapshot = {
 export const getObservabilitySnapshot = unstable_cache(
   async (): Promise<ObservabilitySnapshot> => {
     const rc = await getRuntimeConfig();
-    const [mcp, oversight, pending] = await Promise.all([
+    const [mcp, oversight, pending, pendingCounts] = await Promise.all([
       introspectMcp(),
       getOversightStats().catch(() => null),
       listPendingActionsForAdmin({ limit: 50 }),
+      countPendingActionsByStatus().catch(() => ({})),
     ]);
     let gatewayCatalogCount: number | null = null;
     if (env.AI_GATEWAY_API_KEY) {
@@ -55,6 +59,7 @@ export const getObservabilitySnapshot = unstable_cache(
             oldestPendingAt: oversight.oldestPending?.toISOString() ?? null,
           }
         : null,
+      pendingActionCounts: pendingCounts,
       gatewayCatalogCount,
       pendingActions: pending,
       fetchedAt: new Date().toISOString(),

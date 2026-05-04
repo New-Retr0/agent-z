@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { getRuntimeConfig } from "@repo/config/runtime-config";
 import { prisma } from "@repo/db";
 import { discordRequest, loadDiscordToolConfig, type DiscordToolConfig } from "@repo/discord-tools";
 import { meetsTier, resolveTier, tierLabel, type Tier } from "./tier";
@@ -9,12 +10,20 @@ type McpExtra = {
   authInfo?: { extra?: { actor?: Actor } };
 };
 
-let cachedDiscordConfig: DiscordToolConfig | null = null;
-function getDiscordConfig(): DiscordToolConfig {
-  if (!cachedDiscordConfig) {
-    cachedDiscordConfig = loadDiscordToolConfig();
+let discordConfigMemo: { cfg: DiscordToolConfig; expires: number } | null = null;
+
+async function resolveDiscordConfigCached(): Promise<DiscordToolConfig> {
+  const now = Date.now();
+  if (discordConfigMemo && discordConfigMemo.expires > now) {
+    return discordConfigMemo.cfg;
   }
-  return cachedDiscordConfig;
+  const rc = await getRuntimeConfig();
+  const cfg = loadDiscordToolConfig(process.env, {
+    reactionVerifiedRoleIdFromDb: rc.verifiedRoleId,
+    allowDeleteVerifiedRoleFromDb: rc.allowDeleteVerifiedRole,
+  });
+  discordConfigMemo = { cfg, expires: now + 30_000 };
+  return cfg;
 }
 
 async function authorizeOrFail(extra: McpExtra | undefined, required: Tier, resourceLabel: string) {
@@ -70,7 +79,6 @@ export function registerResources(server: McpServer) {
         description:
           "Discord role IDs grouped by Agent Z tier. Roles map admin > mod > verified > public.",
         tiers: matrix,
-        ownerOverrideUserId: process.env.AGENT_Z_OWNER_DISCORD_ID ? "set" : "unset",
       });
     }
   );
@@ -95,7 +103,7 @@ export function registerResources(server: McpServer) {
       if (auth.actor.guildId && guildId !== auth.actor.guildId) {
         throw new Error(`Guild ${guildId} does not match the actor's guild ${auth.actor.guildId}.`);
       }
-      const result = await discordRequest(getDiscordConfig(), {
+      const result = await discordRequest(await resolveDiscordConfigCached(), {
         method: "GET",
         path: `/guilds/${guildId}/channels`,
         auditReason: `agent-z: ${auth.actor.userId ?? "?"} guild-channels ${auth.tier}`,
@@ -124,7 +132,7 @@ export function registerResources(server: McpServer) {
       if (!/^\d{17,20}$/.test(channelId)) {
         throw new Error("channelId must be a Discord snowflake.");
       }
-      const result = await discordRequest(getDiscordConfig(), {
+      const result = await discordRequest(await resolveDiscordConfigCached(), {
         method: "GET",
         path: `/channels/${channelId}/pins`,
         auditReason: `agent-z: ${auth.actor.userId ?? "?"} channel-pinned ${auth.tier}`,

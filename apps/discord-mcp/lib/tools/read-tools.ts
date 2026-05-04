@@ -7,7 +7,7 @@ import {
   executeDiscordListGuildEmojis,
 } from "@repo/discord-tools";
 import {
-  getDiscordConfig,
+  resolveDiscordToolConfigForMcp,
   McpToolContext,
   queryValue,
   readActor,
@@ -39,7 +39,7 @@ export function registerReadTools(server: McpServer) {
       if (denied) return denied;
       try {
         const text = await executeDiscordApiRead(
-          getDiscordConfig(),
+          await resolveDiscordToolConfigForMcp(),
           { path, query, reason },
           {
             capabilityId: "discord_api_read",
@@ -74,7 +74,7 @@ export function registerReadTools(server: McpServer) {
       const denied = tierGate(auth.tier, "verified", "discord_fetch_member");
       if (denied) return denied;
       try {
-        const text = await executeDiscordFetchMember(getDiscordConfig(), input, {
+        const text = await executeDiscordFetchMember(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_fetch_member",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -105,7 +105,7 @@ export function registerReadTools(server: McpServer) {
       const denied = tierGate(auth.tier, "verified", "discord_list_guild_emojis");
       if (denied) return denied;
       try {
-        const text = await executeDiscordListGuildEmojis(getDiscordConfig(), input, {
+        const text = await executeDiscordListGuildEmojis(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_list_guild_emojis",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -136,7 +136,7 @@ export function registerReadTools(server: McpServer) {
       const denied = tierGate(auth.tier, "verified", "discord_list_automod_rules");
       if (denied) return denied;
       try {
-        const text = await executeDiscordListAutoModRules(getDiscordConfig(), input, {
+        const text = await executeDiscordListAutoModRules(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_list_automod_rules",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,

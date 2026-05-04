@@ -1,6 +1,23 @@
 import type { DiscordToolConfig } from "@repo/discord-tools";
 import { loadDiscordToolConfig } from "@repo/discord-tools";
+import { getRuntimeConfig } from "@repo/config/runtime-config";
 import { z } from "zod";
+
+let discordConfigMemo: { cfg: DiscordToolConfig; expires: number } | null = null;
+
+export async function resolveDiscordToolConfigForMcp(): Promise<DiscordToolConfig> {
+  const now = Date.now();
+  if (discordConfigMemo && discordConfigMemo.expires > now) {
+    return discordConfigMemo.cfg;
+  }
+  const rc = await getRuntimeConfig();
+  const cfg = loadDiscordToolConfig(process.env, {
+    reactionVerifiedRoleIdFromDb: rc.verifiedRoleId,
+    allowDeleteVerifiedRoleFromDb: rc.allowDeleteVerifiedRole,
+  });
+  discordConfigMemo = { cfg, expires: now + 30_000 };
+  return cfg;
+}
 import type { Actor } from "../auth";
 import { meetsTier, resolveTier, type Tier } from "../tier";
 
@@ -53,10 +70,3 @@ export function tierGate(actual: Tier, required: Tier, action: string): ToolResu
   );
 }
 
-let cachedDiscordConfig: DiscordToolConfig | null = null;
-export function getDiscordConfig(): DiscordToolConfig {
-  if (!cachedDiscordConfig) {
-    cachedDiscordConfig = loadDiscordToolConfig();
-  }
-  return cachedDiscordConfig;
-}

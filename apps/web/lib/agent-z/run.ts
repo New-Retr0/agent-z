@@ -54,6 +54,27 @@ import {
   truncateDiscordReply,
 } from "@/lib/discord-replies";
 
+function logMcpToolErrorsFromStep(step: unknown): void {
+  if (!step || typeof step !== "object") return;
+  const s = step as Record<string, unknown>;
+  for (const key of ["toolResults", "staticToolResults", "dynamicToolResults"] as const) {
+    const arr = s[key];
+    if (!Array.isArray(arr)) continue;
+    for (const item of arr) {
+      if (!item || typeof item !== "object") continue;
+      const row = item as Record<string, unknown>;
+      const out = row.output;
+      if (out && typeof out === "object" && !Array.isArray(out) && (out as { isError?: boolean }).isError) {
+        const toolName = typeof row.toolName === "string" ? row.toolName : "unknown";
+        const c0 = (out as { content?: Array<{ text?: string }> }).content?.[0];
+        const msg =
+          typeof c0?.text === "string" ? c0.text.slice(0, 320) : JSON.stringify(out).slice(0, 400);
+        console.error(`[agent-z] mcp_tool_error tool=${toolName} message=${msg}`);
+      }
+    }
+  }
+}
+
 export type RunAgentZInput = {
   prompt: string;
   invokerUserId: string;
@@ -269,6 +290,7 @@ export async function runAgentZ(input: RunAgentZInput): Promise<RunAgentZResult>
       onStepFinish: (step) => {
         stepCount += 1;
         if (step.toolCalls?.length) toolCallCount += step.toolCalls.length;
+        logMcpToolErrorsFromStep(step);
       },
     });
 

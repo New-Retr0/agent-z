@@ -18,7 +18,9 @@ Set at least:
 - `DISCORD_BOT_TOKEN`, `DISCORD_PUBLIC_KEY`, `DISCORD_APPLICATION_ID` — from the Discord application.
 - `AI_GATEWAY_API_KEY` — Vercel AI Gateway (see `vercel env pull` / OIDC for local run).
 - `AGENT_Z_ADMIN_SECRET` — long random string for `/admin` session.
-- `AGENT_Z_INTERNAL_SECRET` — shared secret for `POST /api/agent/direct`, `POST /api/discord/verify`, selected cron routes, and `POST /api/internal/staged/start` (MCP staged actions → apps/web).
+- `AGENT_Z_INTERNAL_SECRET` — shared secret for `POST /api/agent/direct`, `POST /api/discord/verify`, selected cron routes, `POST /api/internal/staged/start`, and `POST /api/internal/pending-actions/edit-reason` (MCP staged actions + optional scripted summary edits).
+
+Optional verify-on-reaction + role-delete flags are seeded into Postgres (**runtime_config**), not duplicated as required web env vars. After `prisma migrate deploy`, run `npm run seed:config -w @repo/db` with `REACTION_VERIFIED_ROLE_ID`, `DISCORD_RULES_CHANNEL_ID`, optional `REACTION_MESSAGE_ID`, `REACTION_EMOJI` (see `packages/db/scripts/seed-runtime-config.ts`). Staff tier mapping for `/agent-z-admin` lives in `/admin/config` — there is **no** `AGENT_Z_OWNER_DISCORD_ID` escape hatch.
 - `AGENT_Z_APP_BASE_URL` — e.g. `https://your-deployment.vercel.app` (or `http://localhost:3000` locally).
 
 Optional: `VERCEL_URL` is set on Vercel; used as a fallback for internal URLs if `AGENT_Z_APP_BASE_URL` is missing. For mention/replies in channels, run the external `apps/gateway` relay (`npm run gateway`).
@@ -31,6 +33,8 @@ npx prisma migrate deploy
 ```
 
 Use `DIRECT_URL` (non-pooled) only if your Prisma migrate setup requires it for migrations; runtime uses the pooled `DATABASE_URL`.
+
+**Runtime config (verify / role guards):** after first deploy, run `npm run seed:config -w @repo/db` with the env vars documented in `packages/db/scripts/seed-runtime-config.ts` so verify-on-reaction targets the right channel/message/emoji and optional `MCP_ALLOW_DELETE_VERIFIED_ROLE` is reflected in DB.
 
 ## Local dev
 
@@ -54,6 +58,8 @@ npm run lint
 ```
 
 Use `SKIP_ENV_VALIDATION=1` only for analysis builds when secrets are absent; prefer real `apps/web/.env` (and other app `.env` files) locally.
+
+See [`docs/smoke-tests.md`](docs/smoke-tests.md) for operator-only curl checks (internal staging + summary edit).
 
 ## Production (Vercel)
 

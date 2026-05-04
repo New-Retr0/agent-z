@@ -16,7 +16,7 @@ import {
   executeDiscordUnpinMessage,
 } from "@repo/discord-tools";
 import {
-  getDiscordConfig,
+  resolveDiscordToolConfigForMcp,
   type McpToolContext,
   readActor,
   SNOWFLAKE,
@@ -43,7 +43,7 @@ export function registerWriteDirectTools(server: McpServer) {
       const denied = tierGate(auth.tier, "mod", "discord_send_message");
       if (denied) return denied;
       try {
-        const text = await executeDiscordSendMessage(getDiscordConfig(), input, {
+        const text = await executeDiscordSendMessage(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_send_message",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -76,7 +76,7 @@ export function registerWriteDirectTools(server: McpServer) {
       const denied = tierGate(auth.tier, "mod", "discord_add_reaction");
       if (denied) return denied;
       try {
-        const text = await executeDiscordAddReaction(getDiscordConfig(), input, {
+        const text = await executeDiscordAddReaction(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_add_reaction",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -109,7 +109,7 @@ export function registerWriteDirectTools(server: McpServer) {
       const denied = tierGate(auth.tier, "mod", "discord_remove_reaction");
       if (denied) return denied;
       try {
-        const text = await executeDiscordRemoveReaction(getDiscordConfig(), input, {
+        const text = await executeDiscordRemoveReaction(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_remove_reaction",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -140,7 +140,7 @@ export function registerWriteDirectTools(server: McpServer) {
       const denied = tierGate(auth.tier, "mod", "discord_pin_message");
       if (denied) return denied;
       try {
-        const text = await executeDiscordPinMessage(getDiscordConfig(), input, {
+        const text = await executeDiscordPinMessage(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_pin_message",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -171,7 +171,7 @@ export function registerWriteDirectTools(server: McpServer) {
       const denied = tierGate(auth.tier, "mod", "discord_unpin_message");
       if (denied) return denied;
       try {
-        const text = await executeDiscordUnpinMessage(getDiscordConfig(), input, {
+        const text = await executeDiscordUnpinMessage(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_unpin_message",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -202,7 +202,7 @@ export function registerWriteDirectTools(server: McpServer) {
       const denied = tierGate(auth.tier, "mod", "discord_create_thread");
       if (denied) return denied;
       try {
-        const text = await executeDiscordCreateThread(getDiscordConfig(), input, {
+        const text = await executeDiscordCreateThread(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_create_thread",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -234,7 +234,7 @@ export function registerWriteDirectTools(server: McpServer) {
       const denied = tierGate(auth.tier, "mod", "discord_create_thread_from_message");
       if (denied) return denied;
       try {
-        const text = await executeDiscordCreateThreadFromMessage(getDiscordConfig(), input, {
+        const text = await executeDiscordCreateThreadFromMessage(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_create_thread_from_message",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -265,7 +265,7 @@ export function registerWriteDirectTools(server: McpServer) {
       const denied = tierGate(auth.tier, "mod", "discord_add_thread_member");
       if (denied) return denied;
       try {
-        const text = await executeDiscordAddThreadMember(getDiscordConfig(), input, {
+        const text = await executeDiscordAddThreadMember(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_add_thread_member",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -296,7 +296,7 @@ export function registerWriteDirectTools(server: McpServer) {
       const denied = tierGate(auth.tier, "mod", "discord_remove_thread_member");
       if (denied) return denied;
       try {
-        const text = await executeDiscordRemoveThreadMember(getDiscordConfig(), input, {
+        const text = await executeDiscordRemoveThreadMember(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_remove_thread_member",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -327,7 +327,7 @@ export function registerWriteDirectTools(server: McpServer) {
       const denied = tierGate(auth.tier, "mod", "discord_crosspost_message");
       if (denied) return denied;
       try {
-        const text = await executeDiscordCrosspostMessage(getDiscordConfig(), input, {
+        const text = await executeDiscordCrosspostMessage(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_crosspost_message",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,
@@ -361,7 +361,7 @@ export function registerWriteDirectTools(server: McpServer) {
       if (denied) return denied;
       try {
         const text = await executeDiscordFetchAuditLog(
-          getDiscordConfig(),
+          await resolveDiscordToolConfigForMcp(),
           {
             guildId: input.guildId,
             query: input.query as QueryRecord | undefined,
@@ -398,7 +398,7 @@ export function registerWriteDirectTools(server: McpServer) {
       const denied = tierGate(auth.tier, "mod", "discord_list_guild_webhooks");
       if (denied) return denied;
       try {
-        const text = await executeDiscordListGuildWebhooks(getDiscordConfig(), input, {
+        const text = await executeDiscordListGuildWebhooks(await resolveDiscordToolConfigForMcp(), input, {
           capabilityId: "discord_list_guild_webhooks",
           tier: auth.tier,
           invokerUserId: auth.actor.userId,

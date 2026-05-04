@@ -37,10 +37,6 @@ export const env = createEnv({
     AGENT_Z_EMBED_MODEL: z.string().min(1).optional(),
     CLERK_SECRET_KEY: z.string().optional(),
     CLERK_WEBHOOK_SECRET: z.string().optional(),
-    AGENT_Z_OWNER_DISCORD_ID: z
-      .string()
-      .regex(/^\d{17,20}$/)
-      .optional(),
   },
   client: {
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
@@ -65,7 +61,6 @@ export const env = createEnv({
     AGENT_Z_EMBED_MODEL: process.env.AGENT_Z_EMBED_MODEL,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     CLERK_WEBHOOK_SECRET: process.env.CLERK_WEBHOOK_SECRET,
-    AGENT_Z_OWNER_DISCORD_ID: process.env.AGENT_Z_OWNER_DISCORD_ID,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
   },
   emptyStringAsUndefined: true,

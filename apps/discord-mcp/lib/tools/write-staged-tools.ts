@@ -1,6 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { stagePendingActionFromMcp } from "../stage-pending";
+import { getCachedRoleTierMatrix } from "../tier";
+import { resolveTargetMemberTier, tierBlocksAgentModeration } from "../target-tier";
 import {
   type McpToolContext,
   readActor,
@@ -44,6 +46,19 @@ function registerStaged(
       }
       const { summary: parsedSummary, ...input } = parsed.data;
       const summary = parsedSummary as string;
+      const inp = input as Record<string, unknown>;
+      const gid = typeof inp.guildId === "string" ? inp.guildId.trim() : "";
+      const uid = typeof inp.userId === "string" ? inp.userId.trim() : "";
+      if (gid && uid && /^\d{17,20}$/.test(gid) && /^\d{17,20}$/.test(uid)) {
+        const matrix = await getCachedRoleTierMatrix();
+        const targetTier = await resolveTargetMemberTier({ guildId: gid, userId: uid, matrix });
+        if (tierBlocksAgentModeration(targetTier)) {
+          return textResult(
+            "Refused: target user has the **admin** tier (role mapping) and cannot be moderated by Agent Z. Ask the server owner to act manually.",
+            { isError: true }
+          );
+        }
+      }
       const staged = await stagePendingActionFromMcp({
         actor: auth.actor,
         capability,
