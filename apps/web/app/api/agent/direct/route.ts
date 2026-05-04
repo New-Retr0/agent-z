@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runDirectAgentZ } from "@/lib/agent-z/direct";
+import { runAgentZ } from "@/lib/agent-z/run";
 import { formatDiscordChunks, postDiscordChannelMessage } from "@/lib/discord-replies";
 import {
   parseDiscordContext,
@@ -10,7 +10,18 @@ import {
   timingSafeSecretEqual,
 } from "@/lib/workflow-request";
 
+/**
+ * Internal endpoint called by the chat-bot mention/DM handlers (`packages/chat-bot/src/invoke-direct.ts`).
+ *
+ * Phase 2 swap: this used to call `runDirectAgentZ` (single-shot `generateText` with no tools and an
+ * inline reminder-proposal heuristic). It now calls the shared `runAgentZ` runner which uses
+ * `ToolLoopAgent` + an in-process MCP client to the Discord MCP server. The reminder workflow path is
+ * intentionally removed here — Phase 3 reintroduces scheduling via a `schedule_message` MCP tool that
+ * writes to the new `ScheduledMessage` table.
+ */
+
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
   const expectedSecret = process.env.AGENT_Z_INTERNAL_SECRET;
@@ -30,10 +41,13 @@ export async function POST(request: Request) {
   const discordContext = parseDiscordContext(body.discordContext);
   const replyTarget = parseReplyTarget(body.replyTarget);
   if (!prompt || !invokerUserId || !discordContext || !replyTarget) {
-    return NextResponse.json({ error: "prompt, invokerUserId, discordContext, and replyTarget are required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "prompt, invokerUserId, discordContext, and replyTarget are required" },
+      { status: 400 }
+    );
   }
 
-  const result = await runDirectAgentZ({
+  const result = await runAgentZ({
     prompt,
     invokerUserId,
     discordContext,
@@ -45,10 +59,14 @@ export async function POST(request: Request) {
     for (let i = 0; i < chunks.length; i++) {
       await postDiscordChannelMessage(replyTarget.channelId, chunks[i] ?? "", {
         messageId: i === 0 ? replyTarget.messageId : undefined,
-        components: i === 0 && result.kind === "workflowProposal" ? result.components : undefined,
       });
     }
   }
 
-  return NextResponse.json({ delivered: replyTarget._type === "discord:Channel", kind: result.kind });
+  return NextResponse.json({
+    delivered: replyTarget._type === "discord:Channel",
+    kind: result.kind,
+    toolCallCount: result.toolCallCount,
+    stepCount: result.stepCount,
+  });
 }

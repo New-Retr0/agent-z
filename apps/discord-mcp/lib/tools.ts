@@ -1,10 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
+  discordRequest,
   executeDiscordApiRead,
   executeDiscordMemberRoleUpdate,
   executeDiscordSendMessage,
   executeDiscordTimeoutMember,
+  formatDiscordResponse,
   loadDiscordToolConfig,
   type DiscordToolConfig,
 } from "@repo/discord-tools";
@@ -254,11 +256,9 @@ export function registerTools(server: McpServer) {
       }
 
       try {
-        // Use discord_api_read style of audit reasoning by going through executeDiscordApiRead is wrong — we need
-        // to actually POST. Stand up directly via discordRequest from the capability config to keep the same
-        // guards (guild allowlist, audit reason).
+        // Use discordRequest directly so we can issue the POST /messages/bulk-delete endpoint while
+        // keeping the same retry + audit-reason behavior as the rest of the capabilities.
         const config = getDiscordConfig();
-        const { discordRequest, formatDiscordResponse } = await import("@repo/discord-tools");
         const messages = await discordRequest(config, {
           method: "GET",
           path: `/channels/${input.channelId}/messages`,
